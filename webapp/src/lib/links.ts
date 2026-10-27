@@ -1,8 +1,8 @@
 import { BOT_USERNAME, CHANNEL } from '../config'
 
-/** Ссылка-приглашение: бот запишет пригласившего по параметру start. */
+/** Ссылка-приглашение: сразу открывает Mini App, пригласивший приходит в start_param. */
 export function refLink(userId?: number): string {
-  return `https://t.me/${BOT_USERNAME}?start=ref_${userId ?? 'demo'}`
+  return `https://t.me/${BOT_USERNAME}?startapp=ref_${userId ?? 'demo'}`
 }
 
 export const channelLink = () => `https://t.me/${CHANNEL.replace(/^@/, '')}`

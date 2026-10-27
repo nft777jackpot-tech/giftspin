@@ -8,7 +8,7 @@ export const RTP = 0.9
 export const DEPOSIT_ACCOUNT = '@giftspin_bank'
 
 /** Бот с Mini App, канал проекта (задание на подписку и посты о крупных выигрышах) и поддержка. */
-export const BOT_USERNAME = 'giftspin_bot'
+export const BOT_USERNAME = 'NFTJACKPOTCASINO_BOT'
 export const CHANNEL = '@giftspin'
 export const SUPPORT_BOT_COMMAND = '/support'
 
