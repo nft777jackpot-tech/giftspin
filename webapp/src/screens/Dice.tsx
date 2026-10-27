@@ -4,7 +4,7 @@ import { Money } from '../components/Money'
 import { PageHead } from '../components/PageHead'
 import { fmtMult, fmtNum } from '../lib/format'
 import { t } from '../lib/i18n'
-import { DICE_MAX_CHANCE, DICE_MIN_CHANCE, diceMultiplier } from '../lib/rtp'
+import { DICE_MAX_CHANCE, DICE_MIN_CHANCE, diceMultiplier, diceRoll, diceWin } from '../lib/rtp'
 import { haptic } from '../lib/telegram'
 import { useStore } from '../state/store'
 
@@ -16,7 +16,7 @@ interface Result {
 }
 
 export function Dice() {
-  const { playDice, openSheet } = useStore()
+  const { playGame, openSheet } = useStore()
   const [bet, setBet] = useState(1)
   const [chance, setChance] = useState(0.5)
   const [over, setOver] = useState(false)
@@ -52,7 +52,19 @@ export function Dice() {
     if (rolling) return
     setRolling(true)
     setLast(null)
-    const outcome = await playDice(bet, chance, over, t('Дайс'), `${t('Дайс')} · ${over ? '>' : '<'} ${threshold.toFixed(2)}`)
+    const outcome = await playGame({
+      kind: 'dice',
+      bet,
+      label: t('Дайс'),
+      roundTitle: `${t('Дайс')} · ${over ? '>' : '<'} ${threshold.toFixed(2)}`,
+      params: { chance, over: over ? 1 : 0 },
+      floats: 1,
+      local: (f) => {
+        const value = diceRoll(f[0])
+        const win = diceWin(value, chance, over)
+        return { multiplier: win ? mult : 0, result: value.toFixed(2), win, extra: { roll: value } }
+      },
+    })
     if (outcome === 'insufficient') {
       setRolling(false)
       haptic.error()
@@ -64,8 +76,9 @@ export function Dice() {
       return
     }
     haptic.tap()
-    animateTo(outcome.roll, () => {
-      const res = { roll: outcome.roll, win: outcome.win }
+    const roll = outcome.fields.roll as number
+    animateTo(roll, () => {
+      const res = { roll, win: outcome.win }
       setLast(res)
       setRecent((list) => [res, ...list].slice(0, 16))
       setRolling(false)

@@ -22,7 +22,8 @@ interface Ball {
   duration: number
   slot: number
   mult: number
-  bet: number
+  /** Применить выигрыш и записать раунд — когда шарик долетит до лунки. */
+  reveal(): void
 }
 
 let ballSeq = 0
@@ -52,7 +53,7 @@ function BallView({ ball, onDone }: { ball: Ball; onDone(b: Ball): void }) {
 }
 
 export function Plinko() {
-  const { spend, credit, openSheet, roll, logRound } = useStore()
+  const { playGame, openSheet } = useStore()
   const [bet, setBet] = useState(0.5)
   const [rows, setRows] = useState<PlinkoRows>(12)
   const [risk, setRisk] = useState<PlinkoRisk>('mid')
@@ -64,17 +65,32 @@ export function Plinko() {
   const g = geometry(rows)
   const busy = balls.length > 0
 
-  const drop = () => {
+  const drop = async () => {
     if (balls.length >= MAX_BALLS) return
-    if (!spend(bet, t('Плинко'))) {
+    const outcome = await playGame({
+      kind: 'plinko',
+      bet,
+      label: t('Плинко'),
+      roundTitle: `${t('Плинко')} · ${rows} · ${t(RISKS.find((x) => x.id === risk)!.label)}`,
+      params: { rows, risk },
+      floats: rows,
+      local: (f) => {
+        const path = plinkoPath(f, rows)
+        const slot = path.filter(Boolean).length
+        const mult = mults[slot]
+        return { multiplier: mult, result: fmtMult(mult), win: mult >= 1, extra: { path, slot } }
+      },
+    })
+    if (outcome === 'insufficient') {
       haptic.error()
       openSheet('deposit')
       return
     }
+    if (!outcome) return
     haptic.tap()
-    const r = roll(rows)
-    const path = plinkoPath(r.floats, rows)
-    const slot = path.filter(Boolean).length
+    const path = outcome.fields.path as boolean[]
+    const slot = outcome.fields.slot as number
+    const mult = outcome.multiplier
 
     // Шарик бьётся о колышек каждого ряда и уходит на полшага влево или вправо
     const frames: Keyframe[] = [{ left: '50%', top: `${TOP - 6}%`, easing: 'cubic-bezier(.45,0,1,1)' }]
@@ -85,23 +101,14 @@ export function Plinko() {
     }
     frames.push({ left: `${g.slotX(slot)}%`, top: `${BOTTOM + 3}%` })
 
-    setBalls((list) => [...list, { id: ++ballSeq, frames, duration: 150 * rows + 250, slot, mult: mults[slot], bet }])
-    logRound({
-      game: 'plinko',
-      title: `${t('Плинко')} · ${rows} · ${t(RISKS.find((x) => x.id === risk)!.label)}`,
-      nonce: r.nonce,
-      clientSeed: r.clientSeed,
-      hash: r.hash,
-      params: { rows, risk },
-      result: fmtMult(mults[slot]),
-    })
+    setBalls((list) => [...list, { id: ++ballSeq, frames, duration: 150 * rows + 250, slot, mult, reveal: outcome.reveal }])
   }
 
   const land = (b: Ball) => {
     setBalls((list) => list.filter((x) => x.id !== b.id))
     setHits((h) => ({ ...h, [b.slot]: Date.now() }))
     setRecent((list) => [b.mult, ...list].slice(0, 14))
-    credit(b.bet * b.mult, `${t('Плинко')} ${fmtMult(b.mult)}`)
+    b.reveal()
     if (b.mult >= 2) haptic.success()
     else haptic.select()
   }

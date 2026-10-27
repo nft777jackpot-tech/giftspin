@@ -41,13 +41,17 @@ export interface ServerMe {
   limits: { minDeposit: string; minWithdraw: string; maxWithdraw: string; withdrawFee: string; reviewOver: string }
 }
 
-export interface DiceResult {
-  roll: number
-  win: boolean
+/** Результат одиночной игры с сервера. Доп. поля зависят от игры: дайс — roll, плинко — path и slot. */
+export interface ServerPlay {
   multiplier: number
   payout: string
   balance: string
+  result: string
+  win: boolean
   proof: { hash: string; clientSeed: string; nonce: number }
+  roll?: number
+  path?: boolean[]
+  slot?: number
 }
 
 export interface FairInfo {

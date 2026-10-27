@@ -4,9 +4,8 @@ import { RTP, REF_SHARE } from '../config'
 import { CASES, type CaseDef } from '../data/cases'
 import { findGift, getGift, GIFTS, randomNum, registerGifts, setCatalog, type Gift } from '../data/gifts'
 import { PROMO_SEEDS, REF_FRIENDS, type Promo } from '../data/social'
-import { api, type DiceResult, type ServerGift, type ServerMe, type StockInfo } from '../lib/api'
+import { api, type ServerGift, type ServerMe, type ServerPlay, type StockInfo } from '../lib/api'
 import { fairFloats, randomSeed, sha256Hex } from '../lib/fair'
-import { diceMultiplier, diceRoll, diceWin } from '../lib/rtp'
 import type { GameId } from '../lib/verify'
 
 export interface InvItem {
@@ -65,11 +64,27 @@ interface SeedPair {
 
 export type PromoResult = 'ok' | 'unknown' | 'used' | 'already'
 
-export interface DiceOutcome {
-  roll: number
+export interface GameSpec {
+  /** Имя игры, оно же путь на сервере: /games/<kind>. */
+  kind: string
+  bet: number
+  /** Подпись операции в истории баланса. */
+  label: string
+  /** Подробная запись раунда для страницы «Честная игра». */
+  roundTitle: string
+  /** Параметры игры: уходят на сервер и в запись раунда. */
+  params: Record<string, number | string>
+  /** Сколько чисел сида нужно локальному расчёту (демо без сервера). */
+  floats: number
+  local(floats: number[]): { multiplier: number; result: string; win: boolean; extra?: Record<string, unknown> }
+}
+
+export interface GameOutcome {
+  multiplier: number
   win: boolean
-  mult: number
-  /** Применить результат к балансу и журналу — вызывается после анимации броска. */
+  /** Поля исхода для анимации: дайс — roll, плинко — path и slot. */
+  fields: Record<string, unknown>
+  /** Применить результат к балансу и журналу — после анимации. */
   reveal(): void
 }
 
@@ -95,10 +110,10 @@ interface Store {
   /** Игры, которые считает сервер. Для них исход приходит с сервера, клиент его не задаёт. */
   serverGames: string[]
   /**
-   * Дайс. Если игра на сервере — исход и баланс считает сервер; иначе локально.
+   * Сыграть одиночную игру. Если игра в serverGames — исход и баланс считает сервер; иначе локально (демо).
    * reveal() применяет результат после анимации. 'insufficient' — не хватает баланса.
    */
-  playDice(bet: number, chance: number, over: boolean, label: string, roundTitle: string): Promise<DiceOutcome | 'insufficient' | null>
+  playGame(spec: GameSpec): Promise<GameOutcome | 'insufficient' | null>
   /** Пополнение, вывод и бонусы, суммы в TON. */
   deposit(amount: number, title: string): void
   withdraw(amount: number, title: string): boolean
@@ -422,42 +437,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setRounds((list) => [{ ...r, id: uid(), at: Date.now() }, ...list].slice(0, 100))
   }, [])
 
-  const playDice = useCallback(
-    async (bet: number, chance: number, over: boolean, label: string, roundTitle: string): Promise<DiceOutcome | 'insufficient' | null> => {
-      if (bet <= 0 || bet > balanceTon + 1e-9) return 'insufficient'
+  const playGame = useCallback(
+    async (spec: GameSpec): Promise<GameOutcome | 'insufficient' | null> => {
+      if (spec.bet <= 0 || spec.bet > balanceTon + 1e-9) return 'insufficient'
+      const round = (nonce: number, clientSeed: string, hash: string, result: string) =>
+        logRound({ game: spec.kind as GameId, title: spec.roundTitle, nonce, clientSeed, hash, params: spec.params, result })
+
       // Игра на сервере: сервер списывает, считает и зачисляет сам. Клиент показывает результат с его слов
-      if (serverRef.current && serverGames.includes('dice')) {
-        add(-bet) // списываем на экране сразу, итог подтвердит сервер
-        setStats((st) => ({ ...st, bets: st.bets + 1, betsToday: st.betsToday + 1, wagered: st.wagered + bet, wageredWeek: st.wageredWeek + bet }))
+      if (serverRef.current && serverGames.includes(spec.kind)) {
+        add(-spec.bet) // списываем на экране сразу, итог подтвердит сервер
+        setStats((st) => ({ ...st, bets: st.bets + 1, betsToday: st.betsToday + 1, wagered: st.wagered + spec.bet, wageredWeek: st.wageredWeek + spec.bet }))
         try {
-          const res = await api<DiceResult>('/games/dice', { method: 'POST', body: { amount: bet.toFixed(9), chance, over } })
+          const res = await api<ServerPlay>(`/games/${spec.kind}`, { method: 'POST', body: { amount: spec.bet.toFixed(9), ...spec.params } })
+          const payout = Number(res.payout)
           const reveal = () => {
             syncTon(res.balance)
-            log('bet', label, -bet)
-            if (res.win) {
-              log('win', label, bet * res.multiplier)
-              setStats((st) => ({ ...st, bestWin: Math.max(st.bestWin, bet * res.multiplier) }))
+            log('bet', spec.label, -spec.bet)
+            if (payout > 0) {
+              log('win', spec.label, payout)
+              setStats((st) => ({ ...st, bestWin: Math.max(st.bestWin, payout) }))
             }
-            logRound({ game: 'dice', title: roundTitle, nonce: res.proof.nonce, clientSeed: res.proof.clientSeed, hash: res.proof.hash, params: { chance, over: over ? 1 : 0 }, result: res.roll.toFixed(2) })
+            round(res.proof.nonce, res.proof.clientSeed, res.proof.hash, res.result)
           }
-          return { roll: res.roll, win: res.win, mult: res.multiplier, reveal }
+          return { multiplier: res.multiplier, win: res.win, fields: res as unknown as Record<string, unknown>, reveal }
         } catch (e) {
           toast(String((e as Error).message ?? e), 'error')
           refreshServer()
           return null
         }
       }
-      // Демо без сервера: как раньше, исход из локальных сидов
-      if (!spend(bet, label)) return 'insufficient'
-      const mult = diceMultiplier(chance)
-      const r = roll(1)
-      const value = diceRoll(r.floats[0])
-      const win = diceWin(value, chance, over)
+
+      // Демо без сервера: исход из локальных сидов, баланс меняется на клиенте
+      if (!spend(spec.bet, spec.label)) return 'insufficient'
+      const fl = roll(spec.floats)
+      const c = spec.local(fl.floats)
       const reveal = () => {
-        if (win) credit(bet * mult, label)
-        logRound({ game: 'dice', title: roundTitle, nonce: r.nonce, clientSeed: r.clientSeed, hash: r.hash, params: { chance, over: over ? 1 : 0 }, result: value.toFixed(2) })
+        if (c.multiplier > 0) credit(spec.bet * c.multiplier, spec.label)
+        round(fl.nonce, fl.clientSeed, fl.hash, c.result)
       }
-      return { roll: value, win, mult, reveal }
+      return { multiplier: c.multiplier, win: c.win, fields: c.extra ?? {}, reveal }
     },
     [balanceTon, serverGames, add, syncTon, log, logRound, refreshServer, spend, credit, roll],
   )
@@ -517,7 +535,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       spend,
       credit,
       serverGames,
-      playDice,
+      playGame,
       deposit,
       withdraw,
       bonus,
@@ -548,7 +566,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       server, refreshServer, inventory, catalog, warehouse, giftRequests, history, sheet, balanceTon, spend, credit, deposit, withdraw,
-      bonus, serverGames, playDice, addItem, removeItems, sellItems, withdrawGifts, seeds, revealed, roll, rotateSeeds, rounds, logRound, stats, noteShare, tasksDone,
+      bonus, serverGames, playGame, addItem, removeItems, sellItems, withdrawGifts, seeds, revealed, roll, rotateSeeds, rounds, logRound, stats, noteShare, tasksDone,
       completeTask, promos, promo, activatePromo, addPromo, refClaimed, claimRef, cases, addCase, removeCase,
     ],
   )

@@ -1,13 +1,13 @@
 // Игры на сервере: сервер сам принимает ставку, считает исход честной схемой и меняет баланс.
 // Клиент только показывает результат и не может его подделать. Сейчас так работает дайс — образец для остальных.
 import { fromNano, toNano } from '@ton/core'
-import { config } from './config.ts'
 import { q, transaction, type Row } from './db.ts'
 import { fairFloats, randomSeed, sha256Hex } from './fair.ts'
+import { DICE_MAX_CHANCE, DICE_MIN_CHANCE, diceMultiplier, diceRoll, diceWin, PLINKO_ROWS, plinkoMultipliers, plinkoPath, type PlinkoRisk, type PlinkoRows } from './gamemath.ts'
 import { applyLedger, LedgerError } from './ledger.ts'
 
 /** Игры, которые считает сервер. Остальные пока на клиенте (только testnet), см. TRUST_CLIENT_GAMES. */
-export const SERVER_GAMES = ['dice'] as const
+export const SERVER_GAMES = ['dice', 'plinko'] as const
 
 const MAX_BET = toNano('1000')
 const REVEALED_KEEP = 20
@@ -64,57 +64,78 @@ export function rotateSeeds(userId: number, clientSeed?: string): SeedInfo {
   })
 }
 
-// ---------- Дайс ----------
+// ---------- Движок одиночных игр ----------
+// Общий ход: списать ставку, взять числа из запечатанного сида, посчитать множитель, зачислить выигрыш.
+// Исход берётся из серверного сида, поэтому клиент его не задаёт и не подделает.
 
-const DICE_MIN_CHANCE = 0.01
-const DICE_MAX_CHANCE = 0.95
-
-/** Множитель при шансе chance: как на сайте, floor до 4 знаков. */
-const diceMultiplier = (chance: number) => Math.floor((config.rtp / chance) * 10000) / 10000
-
-export interface DiceResult {
-  roll: number
-  win: boolean
+export interface PlayResult {
   multiplier: number
   payout: string
   balance: string
-  /** Доказательство: по хешу, клиентскому сиду и номеру ставки исход проверяется после раскрытия пары. */
+  /** Короткая запись исхода для журнала проверки. */
+  result: string
+  win: boolean
   proof: { hash: string; clientSeed: string; nonce: number }
+  [field: string]: unknown
 }
 
-/**
- * Один бросок. Внутри одной транзакции: списание ставки, расчёт исхода из сидов, рост номера ставки и
- * (при выигрыше) зачисление. Баланс не может уйти в минус — это проверяет база.
- */
-export function playDice(userId: number, betNano: bigint, chance: number, over: boolean): DiceResult {
+interface Computed {
+  multiplier: number
+  result: string
+  win: boolean
+  /** Поля, нужные сайту для анимации, например путь шарика в плинко. */
+  extra?: Record<string, unknown>
+}
+
+function resolve(userId: number, kind: string, betNano: bigint, floatCount: number, compute: (floats: number[]) => Computed): PlayResult {
   if (betNano <= 0n || betNano > MAX_BET) throw new LedgerError('Неверная ставка')
-  if (!(chance >= DICE_MIN_CHANCE && chance <= DICE_MAX_CHANCE)) throw new LedgerError('Неверный шанс')
-  const mult = diceMultiplier(chance)
   ensureSeeds(userId)
   return transaction(() => {
     const r = seedRow(userId)!
     const nonce = Number(r.nonce)
-    applyLedger(userId, 'bet', -betNano, `dice:${nonce}`)
-    const [u] = fairFloats(String(r.server_seed), String(r.client_seed), nonce, 1)
-    const roll = Math.floor(u * 10000) / 100
-    const k = Math.round(roll * 100)
-    const edge = Math.round(chance * 10000)
-    const win = over ? k >= 10000 - edge : k < edge
+    applyLedger(userId, 'bet', -betNano, `${kind}:${nonce}`)
+    const floats = fairFloats(String(r.server_seed), String(r.client_seed), nonce, floatCount)
+    const c = compute(floats)
     q('UPDATE game_seeds SET nonce = nonce + 1 WHERE user_id = ?').run(userId)
 
     let payout = 0n
-    let balance = (q('SELECT balance_nano FROM users WHERE id = ?').get(userId)!.balance_nano as bigint)
-    if (win) {
-      payout = (betNano * BigInt(Math.round(mult * 10000))) / 10000n
-      balance = applyLedger(userId, 'win', payout, `dice:${nonce}`)
+    let balance = q('SELECT balance_nano FROM users WHERE id = ?').get(userId)!.balance_nano as bigint
+    if (c.multiplier > 0) {
+      payout = (betNano * BigInt(Math.round(c.multiplier * 10000))) / 10000n
+      if (payout > 0n) balance = applyLedger(userId, 'win', payout, `${kind}:${nonce}`)
     }
     return {
-      roll,
-      win,
-      multiplier: mult,
+      multiplier: c.multiplier,
       payout: fromNano(payout),
       balance: fromNano(balance),
+      result: c.result,
+      win: c.win,
       proof: { hash: String(r.server_hash), clientSeed: String(r.client_seed), nonce },
+      ...(c.extra ?? {}),
     }
+  })
+}
+
+/** Дайс: бросок 0.00–99.99, выигрыш при попадании в выбранный диапазон. */
+export function playDice(userId: number, betNano: bigint, chance: number, over: boolean): PlayResult {
+  if (!(chance >= DICE_MIN_CHANCE && chance <= DICE_MAX_CHANCE)) throw new LedgerError('Неверный шанс')
+  const mult = diceMultiplier(chance)
+  return resolve(userId, 'dice', betNano, 1, ([u]) => {
+    const roll = diceRoll(u)
+    const win = diceWin(roll, chance, over)
+    return { multiplier: win ? mult : 0, result: roll.toFixed(2), win, extra: { roll } }
+  })
+}
+
+/** Плинко: шарик идёт по рядам, лунка задаёт множитель. Путь возвращается для анимации. */
+export function playPlinko(userId: number, betNano: bigint, rows: PlinkoRows, risk: PlinkoRisk): PlayResult {
+  if (!(PLINKO_ROWS as readonly number[]).includes(rows)) throw new LedgerError('Неверное число рядов')
+  if (!['low', 'mid', 'high'].includes(risk)) throw new LedgerError('Неверный риск')
+  const mults = plinkoMultipliers(rows, risk)
+  return resolve(userId, 'plinko', betNano, rows, (floats) => {
+    const path = plinkoPath(floats, rows)
+    const slot = path.filter(Boolean).length
+    const mult = mults[slot]
+    return { multiplier: mult, result: `x${mult}`, win: mult >= 1, extra: { path, slot } }
   })
 }
