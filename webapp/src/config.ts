@@ -9,7 +9,7 @@ export const DEPOSIT_ACCOUNT = '@giftspin_bank'
 
 /** Бот с Mini App, канал проекта (задание на подписку и посты о крупных выигрышах) и поддержка. */
 export const BOT_USERNAME = 'NFTJACKPOTCASINO_BOT'
-export const CHANNEL = '@giftspin'
+export const CHANNEL = '@NFTJackpotAnnounce'
 export const SUPPORT_BOT_COMMAND = '/support'
 
 /** Выигрыш от этой суммы в TON бот публикует в канале проекта. */
