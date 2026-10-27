@@ -3,11 +3,11 @@
 import { fromNano, toNano } from '@ton/core'
 import { q, transaction, type Row } from './db.ts'
 import { fairFloats, randomSeed, sha256Hex } from './fair.ts'
-import { DICE_MAX_CHANCE, DICE_MIN_CHANCE, diceMultiplier, diceRoll, diceWin, PLINKO_ROWS, plinkoMultipliers, plinkoPath, type PlinkoRisk, type PlinkoRows } from './gamemath.ts'
+import { caseOdds, DICE_MAX_CHANCE, DICE_MIN_CHANCE, diceMultiplier, diceRoll, diceWin, pickIndex, PLINKO_ROWS, plinkoMultipliers, plinkoPath, type PlinkoRisk, type PlinkoRows } from './gamemath.ts'
 import { applyLedger, LedgerError } from './ledger.ts'
 
 /** Игры, которые считает сервер. Остальные пока на клиенте (только testnet), см. TRUST_CLIENT_GAMES. */
-export const SERVER_GAMES = ['dice', 'plinko'] as const
+export const SERVER_GAMES = ['dice', 'plinko', 'case'] as const
 
 const MAX_BET = toNano('1000')
 const REVEALED_KEEP = 20
@@ -137,5 +137,56 @@ export function playPlinko(userId: number, betNano: bigint, rows: PlinkoRows, ri
     const slot = path.filter(Boolean).length
     const mult = mults[slot]
     return { multiplier: mult, result: `x${mult}`, win: mult >= 1, extra: { path, slot } }
+  })
+}
+
+// ---------- Кейсы ----------
+// Пока только кейсы с монетами (как «Бомж»). Порядок призов = порядок шансов, как на сайте.
+// Кейсы с подарками подключим вместе с апгрейдом и контрактами (списание/выдача со склада).
+const CASE_CATALOG: Record<string, { price: string; items: string[] }> = {
+  bomzh: { price: '0.1', items: ['ton-0.01', 'ton-0.02', 'ton-0.05', 'ton-0.1', 'ton-0.5', 'ton-1', 'ton-2'] },
+}
+const isCoin = (id: string) => id.startsWith('ton-')
+const coinValue = (id: string) => Number(id.slice(4))
+
+export interface CasePrize {
+  id: string
+  value: string
+  nonce: number
+}
+export interface CaseResult {
+  prizes: CasePrize[]
+  balance: string
+  /** Пара сидов раунда: хеш и клиентский сид — одни на все открытые кейсы, у каждого свой nonce. */
+  hash: string
+  clientSeed: string
+}
+
+/** Открыть count кейсов. Призы (монеты) выбирает сервер из запечатанного сида и сразу зачисляет. */
+export function openCase(userId: number, caseId: string, count: number): CaseResult {
+  const def = CASE_CATALOG[caseId]
+  if (!def) throw new LedgerError('Нет такого кейса')
+  if (!Number.isInteger(count) || count < 1 || count > 10) throw new LedgerError('Можно открыть от 1 до 10 кейсов')
+  if (!def.items.every(isCoin)) throw new LedgerError('Кейсы с подарками ещё не на сервере')
+  const priceNano = toNano(def.price)
+  const chances = caseOdds(def.items.map(coinValue), Number(def.price))
+  ensureSeeds(userId)
+  return transaction(() => {
+    const r = seedRow(userId)!
+    const serverSeed = String(r.server_seed)
+    const hash = String(r.server_hash)
+    const clientSeed = String(r.client_seed)
+    let balance = q('SELECT balance_nano FROM users WHERE id = ?').get(userId)!.balance_nano as bigint
+    const prizes: CasePrize[] = []
+    for (let i = 0; i < count; i++) {
+      const nonce = Number(q('SELECT nonce FROM game_seeds WHERE user_id = ?').get(userId)!.nonce)
+      balance = applyLedger(userId, 'bet', -priceNano, `case:${nonce}`)
+      const [u] = fairFloats(serverSeed, clientSeed, nonce, 1)
+      const id = def.items[pickIndex(chances, u)]
+      q('UPDATE game_seeds SET nonce = nonce + 1 WHERE user_id = ?').run(userId)
+      balance = applyLedger(userId, 'win', toNano(String(coinValue(id))), `case:${nonce}`)
+      prizes.push({ id, value: String(coinValue(id)), nonce })
+    }
+    return { prizes, balance: fromNano(balance), hash, clientSeed }
   })
 }

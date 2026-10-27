@@ -5,7 +5,7 @@ import { authenticate, isAdmin } from './auth.ts'
 import { config, NETWORK, TON_CONNECT_CHAIN } from './config.ts'
 import type { Row } from './db.ts'
 import { unmatchedDeposits, userDeposits } from './deposits.ts'
-import { ensureSeeds, playDice, playPlinko, revealedSeeds, rotateSeeds, SERVER_GAMES } from './games.ts'
+import { ensureSeeds, openCase, playDice, playPlinko, revealedSeeds, rotateSeeds, SERVER_GAMES } from './games.ts'
 import { changeBalance, ensureUser, history, LedgerError, type User } from './ledger.ts'
 import { commentPayload, friendly, hotAddress, hotBalance } from './ton.ts'
 import type { TgUpdate } from './telegram.ts'
@@ -180,6 +180,17 @@ export function registerRoutes(app: FastifyInstance) {
     if (!user) return
     try {
       return playPlinko(user.id, parseAmount(req.body?.amount), Number(req.body?.rows) as 8 | 12 | 16, String(req.body?.risk) as 'low' | 'mid' | 'high')
+    } catch (e) {
+      return fail(reply, e)
+    }
+  })
+
+  // Кейсы на сервере: призы выбирает сервер и сразу зачисляет монеты
+  app.post<{ Body: { caseId?: string; count?: number } }>('/api/games/case', async (req, reply) => {
+    const user = requireUser(req, reply)
+    if (!user) return
+    try {
+      return openCase(user.id, String(req.body?.caseId ?? ''), Number(req.body?.count ?? 1))
     } catch (e) {
       return fail(reply, e)
     }

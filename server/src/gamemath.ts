@@ -58,3 +58,41 @@ export function plinkoMultipliers(rows: PlinkoRows, risk: PlinkoRisk): number[] 
 
 /** Путь шарика: на каждом ряду вправо, если u ≥ 0.5. */
 export const plinkoPath = (floats: number[], rows: number) => floats.slice(0, rows).map((u) => u >= 0.5)
+
+// ---------- Кейсы ----------
+/** Шансы призов: подбираются так, чтобы средняя выдача была ровно RTP × цена кейса. Как на сайте. */
+export function caseOdds(values: number[], price: number): number[] {
+  const target = rtp() * price
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  if (target <= min || target >= max) throw new Error(`Case EV ${target} outside ${min}..${max}`)
+  const xs = values.map((v) => v / target)
+  const probsFor = (lambda: number) => {
+    const logits = xs.map((x) => -lambda * x)
+    const top = Math.max(...logits)
+    const w = logits.map((l) => Math.exp(l - top))
+    const sum = w.reduce((a, b) => a + b, 0)
+    return w.map((x) => x / sum)
+  }
+  const ev = (lambda: number) => probsFor(lambda).reduce((acc, p, i) => acc + p * values[i], 0)
+  let lo = -1
+  let hi = 1
+  while (ev(lo) < target) lo *= 2
+  while (ev(hi) > target) hi *= 2
+  for (let i = 0; i < 100; i++) {
+    const mid = (lo + hi) / 2
+    if (ev(mid) > target) lo = mid
+    else hi = mid
+  }
+  return probsFor((lo + hi) / 2)
+}
+
+/** Индекс приза по числу u из [0, 1). */
+export function pickIndex(probs: number[], u: number): number {
+  let acc = 0
+  for (let i = 0; i < probs.length; i++) {
+    acc += probs[i]
+    if (u < acc) return i
+  }
+  return probs.length - 1
+}

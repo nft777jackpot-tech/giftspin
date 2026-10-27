@@ -6,7 +6,7 @@ import { Money } from '../components/Money'
 import { PageHead } from '../components/PageHead'
 import { WinModal } from '../components/WinModal'
 import type { CaseDef } from '../data/cases'
-import { getGift, giftRarity, isCoin, randomNum } from '../data/gifts'
+import { getGift, giftRarity, isCoin } from '../data/gifts'
 import { fmtAmount, fmtChance } from '../lib/format'
 import { t } from '../lib/i18n'
 import { pickIndex } from '../lib/rtp'
@@ -96,7 +96,7 @@ function Reel({ strip, cell, spin, seconds, win }: ReelProps) {
 }
 
 function CaseOpen({ c }: { c: CaseDef }) {
-  const { spend, credit, addItem, sellItems, openSheet, roll, logRound } = useStore()
+  const { openCase, sellItems, openSheet } = useStore()
   const probs = useMemo(() => c.items.map((i) => i.chance), [c])
   const sorted = useMemo(() => [...c.items].sort((a, b) => getGift(b.giftId).price - getGift(a.giftId).price), [c])
 
@@ -127,23 +127,19 @@ function CaseOpen({ c }: { c: CaseDef }) {
     setPhase('idle')
   }
 
-  const openCases = () => {
+  const openCases = async () => {
     if (phase === 'spinning') return
-    if (!spend(c.price * count, count > 1 ? `${title} × ${count}` : title)) {
+    // Призы на сервере выбирает сам сервер, их исход можно проверить на странице честной игры
+    const res = await openCase(c.id, count, title, title)
+    if (res === 'insufficient') {
       haptic.error()
       openSheet('deposit')
       return
     }
+    if (!res) return
     haptic.heavy()
-    // Каждый кейс — отдельная ставка со своим номером, её можно проверить на странице честной игры
-    const wins = Array.from({ length: count }, () => {
-      const r = roll(1)
-      const giftId = c.items[pickIndex(probs, r.floats[0])].giftId
-      logRound({ game: 'case', title, nonce: r.nonce, clientSeed: r.clientSeed, hash: r.hash, params: { caseId: c.id }, result: getGift(giftId).name })
-      return giftId
-    })
     setStrips(
-      wins.map((giftId) => {
+      res.reel.map((giftId) => {
         const s = randomStrip()
         s[WIN_INDEX] = giftId
         return s
@@ -154,10 +150,7 @@ function CaseOpen({ c }: { c: CaseDef }) {
     setPhase('spinning')
     window.setTimeout(
       () => {
-        // Монета — это TON: сразу на баланс, в инвентарь не попадает
-        const coins = wins.filter(isCoin).reduce((s, id) => s + getGift(id).price, 0)
-        if (coins > 0) credit(coins, title)
-        setWon(wins.map((giftId, i) => (isCoin(giftId) ? { uid: `coin-${Date.now()}-${i}`, giftId, num: 0 } : addItem(giftId, randomNum()))))
+        setWon(res.reveal())
         setPhase('done')
         haptic.success()
       },

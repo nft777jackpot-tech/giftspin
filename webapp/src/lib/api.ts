@@ -88,6 +88,14 @@ export function toNanoString(ton: number): string {
   return (BigInt(int) * 1_000_000_000n + BigInt(frac.padEnd(9, '0'))).toString()
 }
 
+/** Результат открытия кейсов на сервере (призы-монеты уже зачислены). */
+export interface CaseResult {
+  prizes: { id: string; value: string; nonce: number }[]
+  balance: string
+  hash: string
+  clientSeed: string
+}
+
 /** Склад подарков и витрина: коллекции, которые лежат на складе, свободны и с ценой. */
 export interface StockInfo {
   mode: 'telegram' | 'fake' | 'off'

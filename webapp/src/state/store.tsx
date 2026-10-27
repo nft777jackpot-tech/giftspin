@@ -2,10 +2,11 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from '../components/Toaster'
 import { RTP, REF_SHARE } from '../config'
 import { CASES, type CaseDef } from '../data/cases'
-import { findGift, getGift, GIFTS, randomNum, registerGifts, setCatalog, type Gift } from '../data/gifts'
+import { findGift, getGift, GIFTS, isCoin, randomNum, registerGifts, setCatalog, type Gift } from '../data/gifts'
 import { PROMO_SEEDS, REF_FRIENDS, type Promo } from '../data/social'
-import { api, type ServerGift, type ServerMe, type ServerPlay, type StockInfo } from '../lib/api'
+import { api, type CaseResult, type ServerGift, type ServerMe, type ServerPlay, type StockInfo } from '../lib/api'
 import { fairFloats, randomSeed, sha256Hex } from '../lib/fair'
+import { pickIndex } from '../lib/rtp'
 import type { GameId } from '../lib/verify'
 
 export interface InvItem {
@@ -114,6 +115,11 @@ interface Store {
    * reveal() применяет результат после анимации. 'insufficient' — не хватает баланса.
    */
   playGame(spec: GameSpec): Promise<GameOutcome | 'insufficient' | null>
+  /**
+   * Открыть count кейсов. На сервере призы выбирает и зачисляет сам сервер. reel — что показать в лентах,
+   * reveal() применяет итог после прокрутки и возвращает выигранные предметы.
+   */
+  openCase(caseId: string, count: number, label: string, roundTitle: string): Promise<{ reel: string[]; reveal(): InvItem[] } | 'insufficient' | null>
   /** Пополнение, вывод и бонусы, суммы в TON. */
   deposit(amount: number, title: string): void
   withdraw(amount: number, title: string): boolean
@@ -207,6 +213,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [server, setServer] = useState<ServerMe | null>(null)
   const [serverGames, setServerGames] = useState<string[]>([])
   const serverRef = useRef<ServerMe | null>(null)
+  const casesRef = useRef<CaseDef[]>([])
   const syncTon = useCallback((balance: string) => setBalance(Number(balance)), [])
 
   // Склад: с сервером витрина и инвентарь — подарки со склада, без сервера — демо-список и инвентарь в браузере
@@ -480,6 +487,63 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [balanceTon, serverGames, add, syncTon, log, logRound, refreshServer, spend, credit, roll],
   )
 
+  const openCase = useCallback(
+    async (caseId: string, count: number, label: string, roundTitle: string): Promise<{ reel: string[]; reveal(): InvItem[] } | 'insufficient' | null> => {
+      const c = casesRef.current.find((x) => x.id === caseId)
+      if (!c) return null
+      const cost = c.price * count
+      if (cost > balanceTon + 1e-9) return 'insufficient'
+      const round = (nonce: number, clientSeed: string, hash: string, giftId: string) =>
+        logRound({ game: 'case', title: roundTitle, nonce, clientSeed, hash, params: { caseId }, result: getGift(giftId).name })
+      const allCoins = c.items.every((i) => isCoin(i.giftId))
+
+      // Кейсы-монеты на сервере: сервер выбирает призы и сразу зачисляет TON
+      if (serverRef.current && serverGames.includes('case') && allCoins) {
+        add(-cost)
+        setStats((st) => ({ ...st, bets: st.bets + count, betsToday: st.betsToday + count, wagered: st.wagered + cost, wageredWeek: st.wageredWeek + cost }))
+        try {
+          const res = await api<CaseResult>('/games/case', { method: 'POST', body: { caseId, count } })
+          const reveal = (): InvItem[] => {
+            syncTon(res.balance)
+            let best = 0
+            res.prizes.forEach((p) => {
+              const win = Number(p.value)
+              log('bet', label, -c.price)
+              log('win', label, win)
+              best = Math.max(best, win)
+              round(p.nonce, res.clientSeed, res.hash, p.id)
+            })
+            if (best > 0) setStats((st) => ({ ...st, bestWin: Math.max(st.bestWin, best) }))
+            return res.prizes.map((p, i) => ({ uid: `coin-${Date.now()}-${i}`, giftId: p.id, num: 0 }))
+          }
+          return { reel: res.prizes.map((p) => p.id), reveal }
+        } catch (e) {
+          toast(String((e as Error).message ?? e), 'error')
+          refreshServer()
+          return null
+        }
+      }
+
+      // Демо (или кейс с подарками): исход из локальных сидов, баланс на клиенте
+      if (!spend(cost, count > 1 ? `${label} × ${count}` : label)) return 'insufficient'
+      const probs = c.items.map((i) => i.chance)
+      const wins = Array.from({ length: count }, () => {
+        const r = roll(1)
+        const giftId = c.items[pickIndex(probs, r.floats[0])].giftId
+        return { giftId, r }
+      })
+      const reveal = (): InvItem[] => {
+        const coins = wins.filter((w) => isCoin(w.giftId)).reduce((sum, w) => sum + getGift(w.giftId).price, 0)
+        if (coins > 0) credit(coins, label)
+        wins.forEach((w) => round(w.r.nonce, w.r.clientSeed, w.r.hash, w.giftId))
+        return wins.map((w, i) => (isCoin(w.giftId) ? { uid: `coin-${Date.now()}-${i}`, giftId: w.giftId, num: 0 } : addItem(w.giftId, randomNum())))
+      }
+      return { reel: wins.map((w) => w.giftId), reveal }
+    },
+    [balanceTon, serverGames, add, syncTon, log, logRound, refreshServer, spend, credit, roll, addItem],
+  )
+
+
 
   const noteShare = useCallback(() => setStats((s) => ({ ...s, shares: s.shares + 1 })), [])
 
@@ -517,6 +581,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [refClaimed, move, log])
 
   const cases = useMemo(() => [...CASES, ...customCases], [customCases])
+  casesRef.current = cases
   const addCase = useCallback((c: CaseDef) => setCustomCases((list) => [...list.filter((x) => x.id !== c.id), c]), [])
   const removeCase = useCallback((id: string) => setCustomCases((list) => list.filter((x) => x.id !== id)), [])
 
@@ -536,6 +601,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       credit,
       serverGames,
       playGame,
+      openCase,
       deposit,
       withdraw,
       bonus,
@@ -566,7 +632,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       server, refreshServer, inventory, catalog, warehouse, giftRequests, history, sheet, balanceTon, spend, credit, deposit, withdraw,
-      bonus, serverGames, playGame, addItem, removeItems, sellItems, withdrawGifts, seeds, revealed, roll, rotateSeeds, rounds, logRound, stats, noteShare, tasksDone,
+      bonus, serverGames, playGame, openCase, addItem, removeItems, sellItems, withdrawGifts, seeds, revealed, roll, rotateSeeds, rounds, logRound, stats, noteShare, tasksDone,
       completeTask, promos, promo, activatePromo, addPromo, refClaimed, claimRef, cases, addCase, removeCase,
     ],
   )
