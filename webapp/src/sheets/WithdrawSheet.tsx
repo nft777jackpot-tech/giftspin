@@ -6,7 +6,6 @@ import { Money } from '../components/Money'
 import { Sheet } from '../components/Sheet'
 import { toast } from '../components/Toaster'
 import { TonWalletRow } from '../components/TonWalletRow'
-import { DEPOSIT_ACCOUNT } from '../config'
 import { api, ApiError, explorerTx, type Withdrawal } from '../lib/api'
 import { fmtAmount, fmtTime } from '../lib/format'
 import { t, tk } from '../lib/i18n'
@@ -35,7 +34,7 @@ const STATUS: Record<Withdrawal['status'], string> = {
 }
 
 export function WithdrawSheet() {
-  const { sheet, openSheet, balanceTon, withdraw, inventory, withdrawGifts, giftRequests, warehouse, server, refreshServer } = useStore()
+  const { sheet, openSheet, balanceTon, withdraw, inventory, withdrawGifts, giftRequests, server, refreshServer } = useStore()
   const walletAddress = useTonAddress()
   const [tab, setTab] = useState<Tab>('ton')
   const [address, setAddress] = useState('')
@@ -226,10 +225,8 @@ export function WithdrawSheet() {
           )}
           <p className="note">
             {server
-              ? t('Подарок передаёт бот с аккаунта-склада {account} после проверки, обычно в течение часа. Перед выводом напишите боту: Telegram передаёт подарки только тем, кто был активен последние сутки.', {
-                  account: warehouse?.account ? `@${warehouse.account}` : DEPOSIT_ACCOUNT,
-                })
-              : t('Подарки придут от {account} в течение пары минут. Комиссию Telegram за перевод платим мы.', { account: DEPOSIT_ACCOUNT })}
+              ? t('Подарок передаёт бот с аккаунта-склада после проверки, обычно в течение часа. Перед выводом напишите боту: Telegram передаёт подарки только тем, кто был активен последние сутки.')
+              : t('Подарки придут с аккаунта-склада в течение пары минут. Комиссию Telegram за перевод платим мы.')}
           </p>
         </div>
       )}

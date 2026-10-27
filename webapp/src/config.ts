@@ -4,8 +4,11 @@ export const BRAND = 'GiftSpin'
 export const RTP = 0.9
 
 
-/** Аккаунт, на который игроки отправляют подарки для пополнения. */
-export const DEPOSIT_ACCOUNT = '@giftspin_bank'
+/**
+ * Аккаунт-склад, на который игроки отправляют подарки, без сервера. Пусто — аккаунта пока нет,
+ * и приём подарков скрыт: игрок не отправит подарок на чужой username.
+ */
+export const DEPOSIT_ACCOUNT = ''
 
 /** Бот с Mini App, канал проекта (задание на подписку и посты о крупных выигрышах) и поддержка. */
 export const BOT_USERNAME = 'NFTJACKPOTCASINO_BOT'

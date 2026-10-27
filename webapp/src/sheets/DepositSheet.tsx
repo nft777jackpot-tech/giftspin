@@ -45,7 +45,7 @@ export function DepositSheet() {
   // Подарки принимает аккаунт-склад. Без сервера — демо-аккаунт и демо-оценки
   const giftAccount = warehouse?.account ? `@${warehouse.account}` : DEPOSIT_ACCOUNT
   const rateExamples = server ? catalog.slice(0, 6).map((g) => g.id) : RATE_EXAMPLES
-  const giftsReady = !server || (!!warehouse && warehouse.mode !== 'off' && warehouse.connected)
+  const giftsReady = !!giftAccount && (!server || (!!warehouse && warehouse.mode !== 'off' && warehouse.connected))
 
   useEffect(() => {
     if (sheet === 'deposit' && server) api<DepositInfo>('/deposit').then(setInfo).catch(() => setInfo(null))
@@ -202,7 +202,7 @@ export function DepositSheet() {
 
       {tab === 'gift' && !giftsReady && (
         <div className="stack">
-          <p className="note">{t('Склад подарков ещё не подключён: депозит подарком заработает после подключения.')}</p>
+          <p className="note">{t('Пополнение подарком скоро появится. Пока пополняйте баланс в TON.')}</p>
         </div>
       )}
 
