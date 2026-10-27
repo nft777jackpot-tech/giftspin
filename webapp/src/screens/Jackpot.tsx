@@ -8,8 +8,7 @@ import { PageHead } from '../components/PageHead'
 import { Sheet } from '../components/Sheet'
 import { toast } from '../components/Toaster'
 import { RTP } from '../config'
-import { getGift, randomGift } from '../data/gifts'
-import { playerColor, randomPlayer } from '../data/players'
+import { getGift } from '../data/gifts'
 import { fmtChance } from '../lib/format'
 import { jackpotPayout } from '../lib/rtp'
 import { getMe, haptic } from '../lib/telegram'
@@ -49,19 +48,6 @@ function arcPath(a0: number, a1: number) {
   return `M${x0} ${y0} A${R_OUT} ${R_OUT} 0 ${large} 1 ${x1} ${y1} L${x2} ${y2} A${R_IN} ${R_IN} 0 ${large} 0 ${x3} ${y3} Z`
 }
 
-function botEntry(index: number): Entry {
-  const p = randomPlayer()
-  // Боты ставят только подарки с витрины
-  const gift = Math.random() < 0.45 ? randomGift(15) : null
-  return {
-    id: p.id,
-    name: p.name,
-    color: playerColor(index),
-    amount: gift ? gift.price : +(0.5 + Math.random() ** 2 * 25).toFixed(1),
-    gifts: gift ? [gift.id] : [],
-  }
-}
-
 export function Jackpot() {
   const { spend, credit, openSheet, inventory, removeItems } = useStore()
   const me = getMe()
@@ -88,18 +74,8 @@ export function Jackpot() {
     const timers: number[] = []
     const later = (fn: () => void, ms: number) => timers.push(window.setTimeout(fn, ms))
 
-    const addBot = () => {
-      const r = round.current
-      if (r.phase === 'spinning' || r.phase === 'result') return
-      setEntries((list) => {
-        if (list.length >= 9) return list
-        const next = [...list, botEntry(list.length)]
-        live.current.entries = next
-        return next
-      })
-      later(maybeStart, 0)
-      later(addBot, 1500 + Math.random() * 3500)
-    }
+    // Без ботов: раунд крутится, когда наберётся 2+ реальных игрока
+    const addBot = () => {}
 
     const maybeStart = () => {
       const r = round.current

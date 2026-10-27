@@ -8,6 +8,7 @@ import {
   IconCrown,
   IconDice,
   IconLayers,
+  IconMegaphone,
   IconPlinko,
   IconRocket,
   IconShield,
@@ -23,7 +24,8 @@ import { LiveFeed } from '../components/LiveFeed'
 import { RTP } from '../config'
 import { fmtCountdown } from '../lib/format'
 import { t } from '../lib/i18n'
-import { haptic } from '../lib/telegram'
+import { channelLink } from '../lib/links'
+import { haptic, openTg } from '../lib/telegram'
 import { useNav, type Page } from '../state/nav'
 import { useStore } from '../state/store'
 
@@ -49,7 +51,6 @@ interface TileProps {
   sub: string
   icon: ReactNode
   tone: string
-  online: number
   art?: ReactNode
   model?: { slug: string; num: number }
   wide?: boolean
@@ -57,7 +58,7 @@ interface TileProps {
   onClick(): void
 }
 
-function GameTile({ title, sub, icon, tone, online, art, model, wide, badge, onClick }: TileProps) {
+function GameTile({ title, sub, icon, tone, art, model, wide, badge, onClick }: TileProps) {
   return (
     <button
       type="button"
@@ -72,9 +73,6 @@ function GameTile({ title, sub, icon, tone, online, art, model, wide, badge, onC
       <div className="game-tile__text">
         <div className="game-tile__title">{title}</div>
         <div className="game-tile__sub">{sub}</div>
-      </div>
-      <div className="game-tile__online">
-        <span className="live__dot" /> {online}
       </div>
       {art && <div className="game-tile__art">{art}</div>}
       {model && <GiftModelImg slug={model.slug} num={model.num} className={`game-tile__model game-tile__model--${model.slug}`} />}
@@ -152,6 +150,17 @@ export function Games() {
           <IconUsers size={20} />
           <span>{t('Друзья')}</span>
         </button>
+        <button
+          type="button"
+          className="quick"
+          onClick={() => {
+            haptic.tap()
+            openTg(channelLink())
+          }}
+        >
+          <IconMegaphone size={20} />
+          <span>{t('Инфо канал')}</span>
+        </button>
       </div>
 
       <div className="section-title">{t('Игры')}</div>
@@ -161,21 +170,20 @@ export function Games() {
           title={t('Кейсы')}
           sub={t('Забери NFT-подарок')}
           tone="blue"
-          online={1284}
           icon={<IconBox size={22} />}
           onClick={() => setTab('cases')}
           art={<GiftModelImg slug={CASE_TILE_MODEL.slug} num={CASE_TILE_MODEL.num} className="game-tile__cluster game-tile__cluster--solo" />}
         />
-        <GameTile title={t('Кейс-батлы')} sub={t('Кто выбьет дороже')} tone="pink" online={644} badge="PvP" icon={<IconSwords size={22} />} model={TILE_MODELS.battles} onClick={go({ name: 'battles' })} />
-        <GameTile title={t('Апгрейд')} sub={t('Обменяй на дороже')} tone="violet" online={412} icon={<IconUpgrade size={22} />} model={TILE_MODELS.upgrade} onClick={() => setTab('upgrade')} />
-        <GameTile title={t('Краш')} sub={t('Забери до взрыва')} tone="orange" online={857} icon={<IconRocket size={22} />} model={TILE_MODELS.crash} onClick={go({ name: 'crash' })} />
-        <GameTile title={t('Мины')} sub={t('Открывай клетки')} tone="teal" online={533} icon={<IconBomb size={22} />} model={TILE_MODELS.mines} onClick={go({ name: 'mines' })} />
-        <GameTile title={t('Плинко')} sub={t('Шарик и множители')} tone="gold" online={318} icon={<IconPlinko size={22} />} model={TILE_MODELS.plinko} onClick={go({ name: 'plinko' })} />
-        <GameTile title={t('Рулетка')} sub={t('Красное, чёрное, зелёное')} tone="red" online={366} icon={<IconWheel size={22} />} model={TILE_MODELS.roulette} onClick={go({ name: 'roulette' })} />
-        <GameTile title={t('Дайс')} sub={t('Свой шанс и множитель')} tone="cyan" online={274} icon={<IconDice size={22} />} model={TILE_MODELS.dice} onClick={go({ name: 'dice' })} />
-        <GameTile title={t('Коинфлип')} sub={t('Один на один')} tone="blue" online={190} badge="PvP" icon={<IconCoin size={22} />} model={TILE_MODELS.coinflip} onClick={go({ name: 'coinflip' })} />
-        <GameTile title={t('Контракты')} sub={t('Несколько в один')} tone="violet" online={157} icon={<IconLayers size={22} />} model={TILE_MODELS.contracts} onClick={go({ name: 'contracts' })} />
-        <GameTile title={t('PvP-джекпот')} sub={t('Игроки против игроков')} tone="green" online={229} badge="PvP" icon={<IconCrown size={22} />} model={TILE_MODELS.jackpot} onClick={go({ name: 'jackpot' })} />
+        <GameTile title={t('Кейс-батлы')} sub={t('Кто выбьет дороже')} tone="pink" badge="PvP" icon={<IconSwords size={22} />} model={TILE_MODELS.battles} onClick={go({ name: 'battles' })} />
+        <GameTile title={t('Апгрейд')} sub={t('Обменяй на дороже')} tone="violet" icon={<IconUpgrade size={22} />} model={TILE_MODELS.upgrade} onClick={() => setTab('upgrade')} />
+        <GameTile title={t('Краш')} sub={t('Забери до взрыва')} tone="orange" icon={<IconRocket size={22} />} model={TILE_MODELS.crash} onClick={go({ name: 'crash' })} />
+        <GameTile title={t('Мины')} sub={t('Открывай клетки')} tone="teal" icon={<IconBomb size={22} />} model={TILE_MODELS.mines} onClick={go({ name: 'mines' })} />
+        <GameTile title={t('Плинко')} sub={t('Шарик и множители')} tone="gold" icon={<IconPlinko size={22} />} model={TILE_MODELS.plinko} onClick={go({ name: 'plinko' })} />
+        <GameTile title={t('Рулетка')} sub={t('Красное, чёрное, зелёное')} tone="red" icon={<IconWheel size={22} />} model={TILE_MODELS.roulette} onClick={go({ name: 'roulette' })} />
+        <GameTile title={t('Дайс')} sub={t('Свой шанс и множитель')} tone="cyan" icon={<IconDice size={22} />} model={TILE_MODELS.dice} onClick={go({ name: 'dice' })} />
+        <GameTile title={t('Коинфлип')} sub={t('Один на один')} tone="blue" badge="PvP" icon={<IconCoin size={22} />} model={TILE_MODELS.coinflip} onClick={go({ name: 'coinflip' })} />
+        <GameTile title={t('Контракты')} sub={t('Несколько в один')} tone="violet" icon={<IconLayers size={22} />} model={TILE_MODELS.contracts} onClick={go({ name: 'contracts' })} />
+        <GameTile title={t('PvP-джекпот')} sub={t('Игроки против игроков')} tone="green" badge="PvP" icon={<IconCrown size={22} />} model={TILE_MODELS.jackpot} onClick={go({ name: 'jackpot' })} />
       </div>
 
       <div className="section-title">

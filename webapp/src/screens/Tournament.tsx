@@ -24,13 +24,11 @@ export function Tournament() {
     return () => clearInterval(timer)
   }, [])
 
-  // Таблица пересчитывается раз в минуту, а не каждую секунду таймера
-  const minute = Math.floor(now / 60000)
-  const leaders = useMemo(() => weeklyLeaders(start, minute * 60000), [start, minute])
+  // Рейтинг собирается из реальных игроков на сервере. Пока его нет — только вы, если делали ставки
+  const leaders = useMemo(() => weeklyLeaders(), [])
   const myPoints = Math.round(stats.wageredWeek * 100) / 100
   const myRank = leaders.filter((l) => l.points > myPoints).length + 1
   const prize = (rank: number) => (rank <= TOURNAMENT_SPLIT.length ? TOURNAMENT_POOL * TOURNAMENT_SPLIT[rank - 1] : 0)
-  const toTop = myRank > TOURNAMENT_SPLIT.length ? leaders[TOURNAMENT_SPLIT.length - 1].points - myPoints : 0
 
   return (
     <div className="screen">
@@ -52,7 +50,6 @@ export function Tournament() {
           <span className="muted small">
             {myPoints > 0 ? t('{points} очков', { points: fmtNum(myPoints, 2) }) : t('Сделайте любую ставку, чтобы попасть в рейтинг')}
           </span>
-          {toTop > 0 && myPoints > 0 && <span className="muted small">{t('До призового места: {n} TON оборота', { n: fmtNum(toTop, 1) })}</span>}
         </div>
         {prize(myRank) > 0 && myPoints > 0 && <Money ton={prize(myRank)} size={14} />}
       </div>
@@ -69,6 +66,15 @@ export function Tournament() {
 
       <div className="section-title">{t('Рейтинг')}</div>
       <div className="panel players">
+        {leaders.length === 0 && myPoints <= 0 && <div className="empty">{t('Пока никто не играл на этой неделе')}</div>}
+        {leaders.length === 0 && myPoints > 0 && (
+          <div className="player-row is-me">
+            <span className="tour-rank">1</span>
+            <Avatar name={me.name || t('Вы')} color="#2ea7ff" size={28} photo={me.photo} />
+            <span className="player-row__name">{t('Вы')}</span>
+            <span className="tour-points">{fmtNum(myPoints, 1)}</span>
+          </div>
+        )}
         {leaders.slice(0, SHOWN).map((l, i) => {
           const rank = i + 1
           const showMe = myPoints > 0 && rank === myRank

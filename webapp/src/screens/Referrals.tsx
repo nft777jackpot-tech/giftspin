@@ -111,6 +111,7 @@ export function Referrals() {
 
       <div className="section-title">{t('Ваши друзья')}</div>
       <div className="panel players">
+        {REF_FRIENDS.length === 0 && <div className="empty">{t('Пока нет приглашённых. Поделитесь ссылкой выше.')}</div>}
         {REF_FRIENDS.map((f) => (
           <div key={f.name} className="player-row">
             <Avatar name={f.name} color={f.color} size={30} />

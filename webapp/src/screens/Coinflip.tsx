@@ -10,8 +10,8 @@ import { PageHead } from '../components/PageHead'
 import { Sheet } from '../components/Sheet'
 import { toast } from '../components/Toaster'
 import { RTP } from '../config'
-import { getGift, nearestGift, randomGift, randomNum } from '../data/gifts'
-import { randomPlayer, type FakePlayer } from '../data/players'
+import { getGift } from '../data/gifts'
+import { type FakePlayer } from '../data/players'
 import { newRound, roundFloats, type RoundSeed } from '../lib/fair'
 import { t } from '../lib/i18n'
 import { coinSide, giftFlipFee, type CoinSide } from '../lib/rtp'
@@ -20,7 +20,6 @@ import { useStore, type InvItem } from '../state/store'
 
 const FLIP_MS = 3200
 const GIFT_TOLERANCE = 0.1
-const MAX_OPEN = 7
 
 type Stake = { kind: 'ton'; amount: number } | { kind: 'gift'; gifts: { giftId: string; num: number }[]; value: number }
 
@@ -47,19 +46,6 @@ let gameSeq = 0
 const stakeValue = (s: Stake) => (s.kind === 'ton' ? s.amount : s.value)
 const other = (s: CoinSide): CoinSide => (s === 'ton' ? 'star' : 'ton')
 
-function botGame(): Game {
-  const host = randomPlayer()
-  // Боты ставят только подарки с витрины
-  const g = Math.random() < 0.5 ? randomGift(30) : null
-  let stake: Stake
-  if (g) {
-    stake = { kind: 'gift', gifts: [{ giftId: g.id, num: g.num ?? randomNum() }], value: g.price }
-  } else {
-    stake = { kind: 'ton', amount: +(0.5 + Math.random() ** 2 * 40).toFixed(1) }
-  }
-  return { id: `cf${++gameSeq}`, host, side: Math.random() < 0.5 ? 'ton' : 'star', stake, round: newRound(), createdAt: Date.now() }
-}
-
 function SideIcon({ side, size = 18 }: { side: CoinSide; size?: number }) {
   return side === 'ton' ? <TonIcon size={size} /> : <StarIcon size={size} />
 }
@@ -80,7 +66,8 @@ export function Coinflip() {
   const { spend, credit, openSheet, inventory, removeItems, addItem } = useStore()
   const me = getMe()
   const meName = me.name || t('Вы')
-  const [games, setGames] = useState<Game[]>(() => Array.from({ length: 5 }, botGame))
+  // Лобби: только игры реальных игроков. Пока сервера нет — лишь созданные вами, без ботов
+  const [games, setGames] = useState<Game[]>([])
   const [mode, setMode] = useState<'ton' | 'gift'>('ton')
   const [bet, setBet] = useState(1)
   const [side, setSide] = useState<CoinSide>('ton')
@@ -91,19 +78,8 @@ export function Coinflip() {
   const later = (fn: () => void, ms: number) => timers.current.push(window.setTimeout(fn, ms))
 
   useEffect(() => {
-    // Боты создают новые игры и разбирают чужие, лобби живёт само
-    const tick = window.setInterval(() => {
-      setGames((list) => {
-        let next = list.filter((g) => g.host.me || Date.now() - g.createdAt < 40000 || Math.random() < 0.7)
-        if (next.filter((g) => !g.host.me).length < MAX_OPEN && Math.random() < 0.5) next = [...next, botGame()]
-        return next
-      })
-    }, 3000)
     const pending = timers.current
-    return () => {
-      clearInterval(tick)
-      pending.forEach(clearTimeout)
-    }
+    return () => pending.forEach(clearTimeout)
   }, [])
 
   const pickedItems = inventory.filter((i) => picked.includes(i.uid))
@@ -164,18 +140,7 @@ export function Coinflip() {
     const game: Game = { id: `cf${++gameSeq}`, host: { id: 'me', name: meName, color: '#2ea7ff', me: true }, side, stake, round: newRound(), createdAt: Date.now() }
     setGames((list) => [game, ...list])
     haptic.tap()
-    // В демо соперник находится за пару секунд
-    later(() => {
-      // Соперник ставит подарок с витрины ближайшей цены, а если витрина пуста — TON на ту же сумму
-      const match = stake.kind === 'gift' ? nearestGift(stake.value) : null
-      const guestStake: Stake =
-        stake.kind === 'ton'
-          ? stake
-          : match
-            ? { kind: 'gift', gifts: [{ giftId: match.id, num: match.num ?? randomNum() }], value: stake.value }
-            : { kind: 'ton', amount: stake.value }
-      startFlip(game, randomPlayer(), guestStake)
-    }, 2000 + Math.random() * 3000)
+    // Игра ждёт реального соперника. Матчинг появится, когда игры переедут на сервер
   }
 
   const join = (game: Game) => {

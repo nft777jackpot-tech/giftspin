@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { toast } from '../components/Toaster'
 import type { CaseDef } from '../data/cases'
 import { getGift, isCoin, randomNum } from '../data/gifts'
-import { randomPlayer } from '../data/players'
 import { newRound, roundFloats, type RoundSeed } from '../lib/fair'
 import { t } from '../lib/i18n'
 import { pickIndex } from '../lib/rtp'
@@ -65,7 +64,6 @@ interface BattlesCtx {
   battles: Battle[]
   create(caseIds: string[], size: number): string | null
   join(id: string): boolean
-  callBot(id: string): void
 }
 
 const Ctx = createContext<BattlesCtx | null>(null)
@@ -86,11 +84,6 @@ function start(b: Battle, cases: CaseDef[]): Battle {
   return { ...b, startedAt: Date.now(), drops, winner }
 }
 
-function botSeat(): Seat {
-  const p = randomPlayer()
-  return { id: p.id, name: p.name, color: p.color }
-}
-
 export function BattlesProvider({ children }: { children: ReactNode }) {
   const store = useStore()
   const [battles, setBattles] = useState<Battle[]>([])
@@ -109,40 +102,19 @@ export function BattlesProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    const cheap = () => live.current.cases.filter((c) => c.price <= 30 && !c.custom)
-    const botBattle = (): Battle => {
-      const pool = cheap()
-      const n = 1 + Math.floor(Math.random() * 4)
-      const caseIds = Array.from({ length: n }, () => pool[Math.floor(Math.random() * pool.length)].id)
-      const size = 2 + Math.floor(Math.random() * 3)
-      const cost = caseIds.reduce((s, id) => s + live.current.cases.find((c) => c.id === id)!.price, 0)
-      const seats: (Seat | null)[] = Array.from({ length: size }, () => null)
-      seats[0] = botSeat()
-      return { id: `b${++seq}`, caseIds, seats, cost, round: newRound(), createdAt: Date.now() }
-    }
-
-    setBattles(Array.from({ length: 4 }, botBattle))
-
     const tick = window.setInterval(() => {
       const now = Date.now()
       setBattles((list) => {
-        let next = list.map((b) => {
-          if (b.startedAt || !b.seats.includes(null)) return b
-          const mine = b.seats.some((s) => s?.me)
-          return Math.random() < (mine ? 0.3 : 0.12) ? fill(b, botSeat()) : b
-        })
-        // Завершённые чужие батлы убираем через полминуты, свои — через пару минут
-        next = next.filter((b) => {
+        // Без ботов лобби наполняют только реальные игроки. Убираем лишь завершённые батлы
+        return list.filter((b) => {
           const end = battleEndsAt(b)
           const mine = b.seats.some((s) => s?.me)
           return now - end < (mine ? 120000 : 30000)
         })
-        if (next.filter((b) => !b.startedAt).length < 4 && Math.random() < 0.3) next = [...next, botBattle()]
-        return next
       })
     }, 900)
     return () => clearInterval(tick)
-  }, [fill])
+  }, [])
 
   // Выплата: победитель забирает подарки всех участников
   useEffect(() => {
@@ -190,9 +162,7 @@ export function BattlesProvider({ children }: { children: ReactNode }) {
     [battles, fill],
   )
 
-  const callBot = useCallback((id: string) => setBattles((list) => list.map((b) => (b.id === id && !b.startedAt ? fill(b, botSeat()) : b))), [fill])
-
-  const value = useMemo(() => ({ battles, create, join, callBot }), [battles, create, join, callBot])
+  const value = useMemo(() => ({ battles, create, join }), [battles, create, join])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 

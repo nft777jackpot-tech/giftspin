@@ -1,5 +1,4 @@
 // Демо-данные для рефералки, промокодов и турнира. В бою всё это приходит с бэкенда
-import { COLORS, NAMES, seeded } from './players'
 
 export interface Promo {
   code: string
@@ -33,13 +32,8 @@ export interface Friend {
   wagered: number
 }
 
-export const REF_FRIENDS: Friend[] = [
-  { name: 'tonwhale', color: COLORS[0], joinedAt: now - 12 * DAY, wagered: 1290 },
-  { name: 'kirill.eth', color: COLORS[1], joinedAt: now - 9 * DAY, wagered: 340 },
-  { name: 'Мария', color: COLORS[2], joinedAt: now - 4 * DAY, wagered: 128 },
-  { name: 'carlos_ton', color: COLORS[4], joinedAt: now - DAY, wagered: 36 },
-  { name: 'sasha_k', color: COLORS[5], joinedAt: now - 2 * 3600000, wagered: 0 },
-]
+// Пока нет сервера с реальными игроками, список друзей пуст — без выдуманных
+export const REF_FRIENDS: Friend[] = []
 
 // ---------- Турнир ----------
 
@@ -57,13 +51,7 @@ export interface Leader {
   points: number
 }
 
-/** Таблица недели. Очки растут к концу недели, как в живом турнире. */
-export function weeklyLeaders(start: number, at = Date.now()): Leader[] {
-  const rnd = seeded(start / DAY)
-  const progress = Math.min(1, Math.max(0.05, (at - start) / (7 * DAY)))
-  return Array.from({ length: 40 }, (_, i) => ({
-    name: NAMES[Math.floor(rnd() * NAMES.length)] + (i > NAMES.length ? `_${i}` : ''),
-    color: COLORS[i % COLORS.length],
-    points: Math.round(9000 * Math.exp(-i * 0.16) * (0.75 + rnd() * 0.5) * progress),
-  })).sort((a, b) => b.points - a.points)
+/** Таблица недели. Пока нет сервера с реальными игроками — пустая, без выдуманных. */
+export function weeklyLeaders(): Leader[] {
+  return []
 }

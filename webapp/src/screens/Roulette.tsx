@@ -4,7 +4,7 @@ import { BetInput } from '../components/BetInput'
 import { Money } from '../components/Money'
 import { PageHead } from '../components/PageHead'
 import { toast } from '../components/Toaster'
-import { randomPlayer, type FakePlayer } from '../data/players'
+import { type FakePlayer } from '../data/players'
 import { fmtMult } from '../lib/format'
 import { ROULETTE_CELLS, rouletteMultiplier, type RouletteColor } from '../lib/rtp'
 import { haptic } from '../lib/telegram'
@@ -79,14 +79,6 @@ export function Roulette() {
       setMyBets(emptyBets())
       live.current.myBets = emptyBets()
       setBots(emptyBots())
-      const addBot = () => {
-        if (round.current.phase !== 'betting') return
-        const color = Math.random() < 0.08 ? 'green' : Math.random() < 0.5 ? 'red' : 'black'
-        const bot = { ...randomPlayer(), amount: +(0.3 + Math.random() ** 2 * 20).toFixed(1) }
-        setBots((b) => ({ ...b, [color]: [...b[color], bot].sort((x, y) => y.amount - x.amount) }))
-        later(addBot, 300 + Math.random() * 900)
-      }
-      later(addBot, 400)
       later(startSpin, BET_MS)
     }
 

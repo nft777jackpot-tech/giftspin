@@ -4,7 +4,7 @@ import { BetInput } from '../components/BetInput'
 import { TonIcon } from '../components/icons'
 import { Money } from '../components/Money'
 import { PageHead } from '../components/PageHead'
-import { randomPlayer, type FakePlayer } from '../data/players'
+import { type FakePlayer } from '../data/players'
 import { fmtAmount, fmtMult } from '../lib/format'
 import { crashPoint } from '../lib/rtp'
 import { t, tk } from '../lib/i18n'
@@ -103,13 +103,9 @@ interface Star {
   phase: number
 }
 
+// Других игроков показываем только настоящих (их пришлёт сервер). Пока сервера нет — список пуст
 function makeBots(): Bot[] {
-  const n = 5 + Math.floor(Math.random() * 6)
-  return Array.from({ length: n }, () => ({
-    ...randomPlayer(),
-    bet: +(0.5 + Math.random() ** 2 * 30).toFixed(1),
-    target: +(1.1 + Math.random() ** 2 * 6).toFixed(2),
-  })).sort((a, b) => b.bet - a.bet)
+  return []
 }
 
 function multTone(m: number) {

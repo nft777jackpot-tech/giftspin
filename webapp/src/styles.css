@@ -1204,7 +1204,7 @@ select.input { appearance: none; color: var(--text); }
 .event-banner__gift--b { right: 86px; bottom: 10px; width: 64px; height: 64px; transform: rotate(-10deg); animation-delay: -1.7s; }
 .event-banner__gift--c { right: 8px; bottom: -10px; width: 58px; height: 58px; animation-delay: -3s; }
 
-.quick-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.quick-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .quick { display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); color: var(--ton); font-size: 13px; font-weight: 700; }
 .quick span { color: var(--text); }
 button.perk { text-align: left; }

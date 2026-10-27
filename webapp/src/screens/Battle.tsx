@@ -61,7 +61,7 @@ function Reel({ c, winGiftId, cell }: { c: CaseDef; winGiftId: string; cell: num
 }
 
 export function Battle({ id }: { id: string }) {
-  const { battles, join, callBot } = useBattles()
+  const { battles, join } = useBattles()
   const { cases, openSheet } = useStore()
   const { back } = useNav()
   const b = battles.find((x) => x.id === id)
@@ -149,9 +149,7 @@ export function Battle({ id }: { id: string }) {
                       <IconPlus size={16} />
                     </span>
                     {mine ? (
-                      <button type="button" className="link-btn small" onClick={() => callBot(b.id)}>
-                        {t('Позвать бота')}
-                      </button>
+                      <span className="muted small">{t('Ждём игрока')}</span>
                     ) : (
                       <button
                         type="button"
