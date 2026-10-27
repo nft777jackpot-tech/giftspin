@@ -5,6 +5,7 @@ import { authenticate, isAdmin } from './auth.ts'
 import { config, NETWORK, TON_CONNECT_CHAIN } from './config.ts'
 import type { Row } from './db.ts'
 import { unmatchedDeposits, userDeposits } from './deposits.ts'
+import { ensureSeeds, playDice, revealedSeeds, rotateSeeds, SERVER_GAMES } from './games.ts'
 import { changeBalance, ensureUser, history, LedgerError, type User } from './ledger.ts'
 import { commentPayload, friendly, hotAddress, hotBalance } from './ton.ts'
 import type { TgUpdate } from './telegram.ts'
@@ -87,6 +88,7 @@ export function registerRoutes(app: FastifyInstance) {
       network: NETWORK,
       depositAddress: friendly(hotAddress()),
       trustClientGames: config.trustClientGames,
+      serverGames: SERVER_GAMES,
       limits: {
         minDeposit: ton(config.minDeposit),
         minWithdraw: ton(config.minWithdraw),
@@ -138,6 +140,35 @@ export function registerRoutes(app: FastifyInstance) {
     try {
       const res = requestWithdrawal(user.id, String(req.body?.address ?? ''), parseAmount(req.body?.amount))
       return { id: res.id, status: res.status, balance: ton(res.balance) }
+    } catch (e) {
+      return fail(reply, e)
+    }
+  })
+
+  // Честная игра: текущая пара сидов игрока и раскрытые прошлые пары для проверки
+  app.get('/api/fair', async (req, reply) => {
+    const user = requireUser(req, reply)
+    if (!user) return
+    const seeds = ensureSeeds(user.id)
+    return { ...seeds, revealed: revealedSeeds(user.id).map((r) => ({ hash: r.server_hash, serverSeed: r.server_seed, clientSeed: r.client_seed, nonce: Number(r.nonce) })) }
+  })
+
+  // Смена пары сидов: старый серверный сид раскрывается, выдаётся новый хеш
+  app.post<{ Body: { clientSeed?: string } }>('/api/fair/rotate', async (req, reply) => {
+    const user = requireUser(req, reply)
+    if (!user) return
+    const prev = ensureSeeds(user.id)
+    const next = rotateSeeds(user.id, String(req.body?.clientSeed ?? '').slice(0, 64))
+    return { ...next, revealedHash: prev.hash }
+  })
+
+  // Дайс на сервере: сервер сам считает исход и меняет баланс. Клиент только показывает результат
+  app.post<{ Body: { amount?: string; chance?: number; over?: boolean } }>('/api/games/dice', async (req, reply) => {
+    const user = requireUser(req, reply)
+    if (!user) return
+    try {
+      const chance = Number(req.body?.chance)
+      return playDice(user.id, parseAmount(req.body?.amount), chance, !!req.body?.over)
     } catch (e) {
       return fail(reply, e)
     }

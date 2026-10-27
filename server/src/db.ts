@@ -91,6 +91,25 @@ db.exec(`
     updated_at INTEGER NOT NULL
   );
 
+  -- Сиды честной игры игрока: сервер держит server_seed в секрете, показывает server_hash, раскрывает при смене пары
+  CREATE TABLE IF NOT EXISTS game_seeds (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id),
+    server_seed TEXT NOT NULL,
+    server_hash TEXT NOT NULL,
+    client_seed TEXT NOT NULL,
+    nonce INTEGER NOT NULL DEFAULT 0
+  );
+
+  -- Раскрытые пары: по ним любой может пересчитать прошлые ставки
+  CREATE TABLE IF NOT EXISTS revealed_seeds (
+    server_hash TEXT PRIMARY KEY,
+    server_seed TEXT NOT NULL,
+    client_seed TEXT NOT NULL,
+    nonce INTEGER NOT NULL,
+    user_id INTEGER,
+    revealed_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS kv (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

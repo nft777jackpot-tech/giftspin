@@ -4,8 +4,9 @@ import { RTP, REF_SHARE } from '../config'
 import { CASES, type CaseDef } from '../data/cases'
 import { findGift, getGift, GIFTS, randomNum, registerGifts, setCatalog, type Gift } from '../data/gifts'
 import { PROMO_SEEDS, REF_FRIENDS, type Promo } from '../data/social'
-import { api, type ServerGift, type ServerMe, type StockInfo } from '../lib/api'
+import { api, type DiceResult, type ServerGift, type ServerMe, type StockInfo } from '../lib/api'
 import { fairFloats, randomSeed, sha256Hex } from '../lib/fair'
+import { diceMultiplier, diceRoll, diceWin } from '../lib/rtp'
 import type { GameId } from '../lib/verify'
 
 export interface InvItem {
@@ -64,6 +65,14 @@ interface SeedPair {
 
 export type PromoResult = 'ok' | 'unknown' | 'used' | 'already'
 
+export interface DiceOutcome {
+  roll: number
+  win: boolean
+  mult: number
+  /** Применить результат к балансу и журналу — вызывается после анимации броска. */
+  reveal(): void
+}
+
 interface Store {
   /** Сервер с кошельком проекта. null — сервер не запущен, всё работает в демо. */
   server: ServerMe | null
@@ -83,6 +92,13 @@ interface Store {
   /** Списывает ставку с баланса. Возвращает false, если не хватает. */
   spend(ton: number, title: string): boolean
   credit(ton: number, title: string): void
+  /** Игры, которые считает сервер. Для них исход приходит с сервера, клиент его не задаёт. */
+  serverGames: string[]
+  /**
+   * Дайс. Если игра на сервере — исход и баланс считает сервер; иначе локально.
+   * reveal() применяет результат после анимации. 'insufficient' — не хватает баланса.
+   */
+  playDice(bet: number, chance: number, over: boolean, label: string, roundTitle: string): Promise<DiceOutcome | 'insufficient' | null>
   /** Пополнение, вывод и бонусы, суммы в TON. */
   deposit(amount: number, title: string): void
   withdraw(amount: number, title: string): boolean
@@ -174,6 +190,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   // Когда сервер запущен, баланс настоящий: он приходит с сервера, а каждое изменение записывается в его журнал
   const [server, setServer] = useState<ServerMe | null>(null)
+  const [serverGames, setServerGames] = useState<string[]>([])
   const serverRef = useRef<ServerMe | null>(null)
   const syncTon = useCallback((balance: string) => setBalance(Number(balance)), [])
 
@@ -203,6 +220,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const me = await api<ServerMe>('/me')
       serverRef.current = me
       setServer(me)
+      setServerGames(me.serverGames ?? [])
       syncTon(me.balance)
       await syncGifts().catch(() => {})
     } catch {
@@ -213,6 +231,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
       serverRef.current = null
       setServer(null)
+      setServerGames([])
     }
   }, [syncTon, syncGifts])
 
@@ -403,6 +422,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setRounds((list) => [{ ...r, id: uid(), at: Date.now() }, ...list].slice(0, 100))
   }, [])
 
+  const playDice = useCallback(
+    async (bet: number, chance: number, over: boolean, label: string, roundTitle: string): Promise<DiceOutcome | 'insufficient' | null> => {
+      if (bet <= 0 || bet > balanceTon + 1e-9) return 'insufficient'
+      // Игра на сервере: сервер списывает, считает и зачисляет сам. Клиент показывает результат с его слов
+      if (serverRef.current && serverGames.includes('dice')) {
+        add(-bet) // списываем на экране сразу, итог подтвердит сервер
+        setStats((st) => ({ ...st, bets: st.bets + 1, betsToday: st.betsToday + 1, wagered: st.wagered + bet, wageredWeek: st.wageredWeek + bet }))
+        try {
+          const res = await api<DiceResult>('/games/dice', { method: 'POST', body: { amount: bet.toFixed(9), chance, over } })
+          const reveal = () => {
+            syncTon(res.balance)
+            log('bet', label, -bet)
+            if (res.win) {
+              log('win', label, bet * res.multiplier)
+              setStats((st) => ({ ...st, bestWin: Math.max(st.bestWin, bet * res.multiplier) }))
+            }
+            logRound({ game: 'dice', title: roundTitle, nonce: res.proof.nonce, clientSeed: res.proof.clientSeed, hash: res.proof.hash, params: { chance, over: over ? 1 : 0 }, result: res.roll.toFixed(2) })
+          }
+          return { roll: res.roll, win: res.win, mult: res.multiplier, reveal }
+        } catch (e) {
+          toast(String((e as Error).message ?? e), 'error')
+          refreshServer()
+          return null
+        }
+      }
+      // Демо без сервера: как раньше, исход из локальных сидов
+      if (!spend(bet, label)) return 'insufficient'
+      const mult = diceMultiplier(chance)
+      const r = roll(1)
+      const value = diceRoll(r.floats[0])
+      const win = diceWin(value, chance, over)
+      const reveal = () => {
+        if (win) credit(bet * mult, label)
+        logRound({ game: 'dice', title: roundTitle, nonce: r.nonce, clientSeed: r.clientSeed, hash: r.hash, params: { chance, over: over ? 1 : 0 }, result: value.toFixed(2) })
+      }
+      return { roll: value, win, mult, reveal }
+    },
+    [balanceTon, serverGames, add, syncTon, log, logRound, refreshServer, spend, credit, roll],
+  )
+
+
   const noteShare = useCallback(() => setStats((s) => ({ ...s, shares: s.shares + 1 })), [])
 
   const completeTask = useCallback(
@@ -456,6 +516,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       balanceTon,
       spend,
       credit,
+      serverGames,
+      playDice,
       deposit,
       withdraw,
       bonus,
@@ -486,7 +548,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       server, refreshServer, inventory, catalog, warehouse, giftRequests, history, sheet, balanceTon, spend, credit, deposit, withdraw,
-      bonus, addItem, removeItems, sellItems, withdrawGifts, seeds, revealed, roll, rotateSeeds, rounds, logRound, stats, noteShare, tasksDone,
+      bonus, serverGames, playDice, addItem, removeItems, sellItems, withdrawGifts, seeds, revealed, roll, rotateSeeds, rounds, logRound, stats, noteShare, tasksDone,
       completeTask, promos, promo, activatePromo, addPromo, refClaimed, claimRef, cases, addCase, removeCase,
     ],
   )

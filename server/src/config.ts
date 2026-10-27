@@ -19,6 +19,8 @@ const WAREHOUSE: WarehouseMode = warehouseEnv === 'fake' ? (IS_TESTNET ? 'fake' 
 
 export const config = {
   port: Number(env.PORT) || 8787,
+  // Доля ставок, возвращаемая игрокам: 0.9 = RTP 90%. Та же, что на сайте
+  rtp: Number(env.RTP) || 0.9,
   // Только локальный адрес: наружу сервер смотрит через прокси или хостинг, а не напрямую
   host: '127.0.0.1',
   dbPath: env.DB_PATH || fileURLToPath(new URL('../data/giftspin.sqlite', import.meta.url)),

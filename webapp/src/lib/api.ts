@@ -36,7 +36,25 @@ export interface ServerMe {
   network: 'testnet' | 'mainnet'
   depositAddress: string
   trustClientGames: boolean
+  /** Игры, которые считает сервер (их исход клиент не подделает). */
+  serverGames: string[]
   limits: { minDeposit: string; minWithdraw: string; maxWithdraw: string; withdrawFee: string; reviewOver: string }
+}
+
+export interface DiceResult {
+  roll: number
+  win: boolean
+  multiplier: number
+  payout: string
+  balance: string
+  proof: { hash: string; clientSeed: string; nonce: number }
+}
+
+export interface FairInfo {
+  hash: string
+  clientSeed: string
+  nonce: number
+  revealed: { hash: string; serverSeed: string; clientSeed: string; nonce: number }[]
 }
 
 export interface DepositInfo {

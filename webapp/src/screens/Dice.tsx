@@ -4,7 +4,7 @@ import { Money } from '../components/Money'
 import { PageHead } from '../components/PageHead'
 import { fmtMult, fmtNum } from '../lib/format'
 import { t } from '../lib/i18n'
-import { DICE_MAX_CHANCE, DICE_MIN_CHANCE, diceMultiplier, diceRoll, diceWin } from '../lib/rtp'
+import { DICE_MAX_CHANCE, DICE_MIN_CHANCE, diceMultiplier } from '../lib/rtp'
 import { haptic } from '../lib/telegram'
 import { useStore } from '../state/store'
 
@@ -16,7 +16,7 @@ interface Result {
 }
 
 export function Dice() {
-  const { spend, credit, openSheet, roll: rollSeeds, logRound } = useStore()
+  const { playDice, openSheet } = useStore()
   const [bet, setBet] = useState(1)
   const [chance, setChance] = useState(0.5)
   const [over, setOver] = useState(false)
@@ -48,37 +48,30 @@ export function Dice() {
     rafRef.current = requestAnimationFrame(step)
   }
 
-  const play = () => {
+  const play = async () => {
     if (rolling) return
-    if (!spend(bet, t('Дайс'))) {
+    setRolling(true)
+    setLast(null)
+    const outcome = await playDice(bet, chance, over, t('Дайс'), `${t('Дайс')} · ${over ? '>' : '<'} ${threshold.toFixed(2)}`)
+    if (outcome === 'insufficient') {
+      setRolling(false)
       haptic.error()
       openSheet('deposit')
       return
     }
+    if (!outcome) {
+      setRolling(false)
+      return
+    }
     haptic.tap()
-    const r = rollSeeds(1)
-    const value = diceRoll(r.floats[0])
-    const win = diceWin(value, chance, over)
-    setRolling(true)
-    setLast(null)
-    animateTo(value, () => {
-      const res = { roll: value, win }
+    animateTo(outcome.roll, () => {
+      const res = { roll: outcome.roll, win: outcome.win }
       setLast(res)
       setRecent((list) => [res, ...list].slice(0, 16))
       setRolling(false)
-      if (win) {
-        credit(bet * mult, `${t('Дайс')} ${fmtMult(mult)}`)
-        haptic.success()
-      } else haptic.error()
-      logRound({
-        game: 'dice',
-        title: `${t('Дайс')} · ${over ? '>' : '<'} ${threshold.toFixed(2)}`,
-        nonce: r.nonce,
-        clientSeed: r.clientSeed,
-        hash: r.hash,
-        params: { chance, over: over ? 1 : 0 },
-        result: value.toFixed(2),
-      })
+      outcome.reveal()
+      if (outcome.win) haptic.success()
+      else haptic.error()
     })
   }
 
