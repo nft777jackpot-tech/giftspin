@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex" />
+<title>GiftSpin · админка</title>
+<style>
+  :root { color-scheme: dark; --bg: #0b0f1a; --card: #141a2a; --line: #252d44; --text: #e8ecf6; --muted: #8b95b0; --accent: #2ea7ff; --green: #2fd17c; --red: #ff5f7a; --gold: #ffc542; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px 16px 60px; background: var(--bg); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  main { max-width: 980px; margin: 0 auto; display: grid; gap: 16px; }
+  h1 { margin: 0; font-size: 22px; }
+  h2 { margin: 0 0 10px; font-size: 16px; }
+  section { padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .muted { color: var(--muted); }
+  .ok { color: var(--green); }
+  .bad { color: var(--red); }
+  input { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #0e1322; color: var(--text); font: inherit; }
+  input.price { width: 96px; text-align: right; font-variant-numeric: tabular-nums; }
+  button { padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button.ghost { background: transparent; border: 1px solid var(--line); color: var(--text); }
+  button.danger { background: transparent; border: 1px solid var(--red); color: var(--red); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 8px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td.n { text-align: right; font-variant-numeric: tabular-nums; }
+  img.gift { width: 40px; height: 40px; border-radius: 8px; display: block; }
+  .scroll { overflow-x: auto; }
+  .empty { color: var(--muted); padding: 6px 0; }
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); padding: 10px 16px; border-radius: 10px; background: #1d2540; border: 1px solid var(--line); display: none; }
+</style>
+</head>
+<body>
+<main>
+  <div class="row" style="justify-content: space-between">
+    <h1>GiftSpin · админка</h1>
+    <div class="row">
+      <input id="token" type="password" placeholder="ADMIN_TOKEN из server/.env" autocomplete="off" />
+      <button id="login">Войти</button>
+    </div>
+  </div>
+
+  <section>
+    <h2>Склад подарков</h2>
+    <div class="row">
+      <span id="status" class="muted">Введите токен администратора</span>
+      <button id="sync" class="ghost" disabled>Сверить склад</button>
+    </div>
+  </section>
+
+  <section>
+    <div class="row" style="justify-content: space-between">
+      <h2>Коллекции и цены</h2>
+      <button id="save" disabled>Сохранить цены</button>
+    </div>
+    <p class="muted" style="margin: 0 0 8px">Цена коллекции в TON. Без цены подарок не показывается на сайте, а депозит им ждёт цену.</p>
+    <div class="scroll"><table id="collections"></table></div>
+  </section>
+
+  <section>
+    <h2>Выводы подарков на проверке</h2>
+    <div class="scroll"><table id="giftWithdrawals"></table></div>
+  </section>
+
+  <section>
+    <h2>Депозиты подарком, ждут зачисления</h2>
+    <div class="scroll"><table id="pending"></table></div>
+  </section>
+
+  <section>
+    <h2>Выводы TON на проверке</h2>
+    <div class="scroll"><table id="tonWithdrawals"></table></div>
+  </section>
+</main>
+<div id="toast"></div>
+<script>
+  const $ = (id) => document.getElementById(id)
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+  const img = (slug, num) => `<img class="gift" src="https://nft.fragment.com/gift/${esc(slug)}-${Number(num)}.webp" alt="" loading="lazy" />`
+  const when = (ms) => new Date(ms).toLocaleString('ru-RU')
+  let token = ''
+  try { token = sessionStorage.getItem('admin-token') || '' } catch {}
+
+  function toast(text, bad) {
+    const el = $('toast')
+    el.textContent = text
+    el.className = bad ? 'bad' : 'ok'
+    el.style.display = 'block'
+    clearTimeout(toast.t)
+    toast.t = setTimeout(() => (el.style.display = 'none'), 3500)
+  }
+
+  async function api(path, method = 'GET', body) {
+    const res = await fetch('/api/admin' + path, {
+      method,
+      headers: { 'x-admin-token': token, ...(body ? { 'content-type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(data.error || `Ошибка ${res.status}`)
+    return data
+  }
+
+  async function load() {
+    let stock, ton
+    try {
+      ;[stock, ton] = await Promise.all([api('/stock'), api('/withdrawals')])
+    } catch (e) {
+      $('status').textContent = e.message
+      $('status').className = 'bad'
+      return
+    }
+    for (const id of ['sync', 'save']) $(id).disabled = false
+    const mode = { telegram: 'Telegram', fake: 'тестовый склад из fixtures/stock.json', off: 'выключен' }[stock.mode]
+    $('status').innerHTML = `Склад: <b>${esc(mode)}</b>. ` + (stock.connected
+      ? `<span class="ok">Подключён${stock.account ? ' · @' + esc(stock.account) : ''}</span>`
+      : `<span class="bad">Не подключён: в аккаунте-складе откройте Telegram для бизнеса → Чат-боты и выберите бота</span>`)
+    $('status').className = ''
+
+    $('collections').innerHTML = stock.collections.length
+      ? `<tr><th></th><th>Коллекция</th><th class="n">На витрине</th><th class="n">Нельзя передать</th><th class="n">У игроков</th><th class="n">Выведено</th><th class="n">Цена, TON</th></tr>` +
+        stock.collections.map((c) => `<tr>
+          <td>${img(c.slug, c.num)}</td>
+          <td>${esc(c.name)}<div class="muted">${esc(c.slug)}</div></td>
+          <td class="n">${c.price ? c.free - c.locked : `<span class="muted">${c.free - c.locked}</span>`}</td>
+          <td class="n">${c.locked}</td><td class="n">${c.players}</td><td class="n">${c.sent}</td>
+          <td class="n"><input class="price" data-slug="${esc(c.slug)}" inputmode="decimal" value="${esc(c.price ?? '')}" placeholder="нет" /></td>
+        </tr>`).join('')
+      : `<tr><td class="empty">На складе пока нет подарков. Нажмите «Сверить склад».</td></tr>`
+
+    $('giftWithdrawals').innerHTML = stock.withdrawals.length
+      ? `<tr><th></th><th>Подарок</th><th>Игрок</th><th class="n">Звёзд за передачу</th><th></th></tr>` +
+        stock.withdrawals.map((w) => `<tr>
+          <td>${img(w.slug, w.num)}</td>
+          <td>${esc(w.name)} #${w.num}${w.error ? `<div class="bad">${esc(w.error)}</div>` : ''}${w.transferAfter && w.transferAfter > Date.now() ? `<div class="muted">Передать можно с ${when(w.transferAfter)}</div>` : ''}</td>
+          <td>${esc(w.user.name)}${w.user.username ? ' · @' + esc(w.user.username) : ''}<div class="muted">id ${w.user.id}</div></td>
+          <td class="n">${w.stars}</td>
+          <td><div class="row">
+            <button data-approve="${esc(w.id)}" ${w.status === 'transferring' ? 'disabled' : ''}>Передать</button>
+            <button class="danger" data-reject="${esc(w.id)}" ${w.status === 'transferring' ? 'disabled' : ''}>Отклонить</button>
+          </div></td>
+        </tr>`).join('')
+      : `<tr><td class="empty">Заявок нет</td></tr>`
+
+    $('pending').innerHTML = stock.pending.length
+      ? `<tr><th></th><th>Подарок</th><th>Игрок</th><th>Чего ждёт</th><th>Когда</th></tr>` +
+        stock.pending.map((d) => `<tr><td>${img(d.slug, d.num)}</td><td>${esc(d.name)} #${d.num}</td><td>id ${d.user}</td>
+          <td>${d.transferAfter && d.transferAfter > Date.now() ? `Передать можно с ${when(d.transferAfter)}` : ''}${!d.price ? '<div class="bad">Нет цены коллекции</div>' : ''}</td>
+          <td>${when(d.at)}</td></tr>`).join('')
+      : `<tr><td class="empty">Нет. Депозиты зачисляются сами, как только у коллекции есть цена и подарок можно передать.</td></tr>`
+
+    $('tonWithdrawals').innerHTML = ton.length
+      ? `<tr><th>Игрок</th><th>Адрес</th><th class="n">TON</th><th>Причина</th><th></th></tr>` +
+        ton.map((w) => `<tr><td>id ${w.user}</td><td style="word-break: break-all">${esc(w.address)}</td><td class="n">${esc(w.amount)}</td>
+          <td class="muted">${esc(w.error ?? '')}</td>
+          <td><div class="row"><button data-ton-approve="${w.id}">Отправить</button><button class="danger" data-ton-reject="${w.id}">Отклонить</button></div></td></tr>`).join('')
+      : `<tr><td class="empty">Заявок нет</td></tr>`
+  }
+
+  async function act(fn, done) {
+    try {
+      const res = await fn()
+      if (res && res.ok === false) throw new Error(res.error || 'Не получилось')
+      toast(done)
+    } catch (e) {
+      toast(e.message, true)
+    }
+    load()
+  }
+
+  $('login').onclick = () => {
+    token = $('token').value.trim()
+    try { sessionStorage.setItem('admin-token', token) } catch {}
+    load()
+  }
+  $('sync').onclick = () => act(() => api('/stock/sync', 'POST'), 'Склад сверен')
+  $('save').onclick = () => {
+    const prices = {}
+    for (const input of document.querySelectorAll('input.price')) prices[input.dataset.slug] = input.value.trim().replace(',', '.')
+    act(() => api('/prices', 'PUT', { prices }), 'Цены сохранены')
+  }
+  document.body.addEventListener('click', (e) => {
+    const b = e.target.closest('button')
+    if (!b) return
+    if (b.dataset.approve) act(() => api(`/gift-withdrawals/${encodeURIComponent(b.dataset.approve)}/approve`, 'POST'), 'Подарок передан игроку')
+    if (b.dataset.reject) {
+      const reason = prompt('Причина отказа, её увидит игрок', 'Отклонено администратором')
+      if (reason !== null) act(() => api(`/gift-withdrawals/${encodeURIComponent(b.dataset.reject)}/reject`, 'POST', { reason }), 'Заявка отклонена, подарок вернулся игроку')
+    }
+    if (b.dataset.tonApprove) act(() => api(`/withdrawals/${b.dataset.tonApprove}/approve`, 'POST'), 'Вывод поставлен в очередь')
+    if (b.dataset.tonReject) {
+      const reason = prompt('Причина отказа, её увидит игрок', 'Отклонено администратором')
+      if (reason !== null) act(() => api(`/withdrawals/${b.dataset.tonReject}/reject`, 'POST', { reason }), 'Вывод отклонён, деньги возвращены')
+    }
+  })
+  if (token) {
+    $('token').value = token
+    load()
+  }
+</script>
+</body>
+</html>

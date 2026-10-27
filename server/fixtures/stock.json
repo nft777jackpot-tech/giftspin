@@ -1,0 +1,359 @@
+{
+  "_comment": "Тестовый склад для WAREHOUSE=fake: ответ getBusinessAccountGifts с настоящими подарками с Fragment",
+  "total_count": 16,
+  "gifts": [
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-artisanbrick-228",
+      "gift": {
+        "gift_id": "fake-artisanbrick",
+        "base_name": "Artisan Brick",
+        "name": "ArtisanBrick-228",
+        "number": 228,
+        "model": {
+          "name": "Cash Roll"
+        },
+        "symbol": {
+          "name": "Alarm"
+        },
+        "backdrop": {
+          "name": "Onyx Black"
+        }
+      },
+      "send_date": 1792800000,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-diamondring-722",
+      "gift": {
+        "gift_id": "fake-diamondring",
+        "base_name": "Diamond Ring",
+        "name": "DiamondRing-722",
+        "number": 722,
+        "model": {
+          "name": "Black Hole"
+        },
+        "symbol": {
+          "name": "Flying Dragon"
+        },
+        "backdrop": {
+          "name": "Shamrock Green"
+        }
+      },
+      "send_date": 1792803600,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-durovscap-42",
+      "gift": {
+        "gift_id": "fake-durovscap",
+        "base_name": "Durov’s Cap",
+        "name": "DurovsCap-42",
+        "number": 42,
+        "model": {
+          "name": "Bluebird"
+        },
+        "symbol": {
+          "name": "Arabian Horse"
+        },
+        "backdrop": {
+          "name": "Persimmon"
+        }
+      },
+      "send_date": 1792807200,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-eternalcandle-77",
+      "gift": {
+        "gift_id": "fake-eternalcandle",
+        "base_name": "Eternal Candle",
+        "name": "EternalCandle-77",
+        "number": 77,
+        "model": {
+          "name": "Tortuga"
+        },
+        "symbol": {
+          "name": "Witch’s Hat"
+        },
+        "backdrop": {
+          "name": "Emerald"
+        }
+      },
+      "send_date": 1792810800,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-evileye-12",
+      "gift": {
+        "gift_id": "fake-evileye",
+        "base_name": "Evil Eye",
+        "name": "EvilEye-12",
+        "number": 12,
+        "model": {
+          "name": "8 Ball"
+        },
+        "symbol": {
+          "name": "Cherry"
+        },
+        "backdrop": {
+          "name": "Rosewood"
+        }
+      },
+      "send_date": 1792814400,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-heroichelmet-47",
+      "gift": {
+        "gift_id": "fake-heroichelmet",
+        "base_name": "Heroic Helmet",
+        "name": "HeroicHelmet-47",
+        "number": 47,
+        "model": {
+          "name": "Cyberpunk"
+        },
+        "symbol": {
+          "name": "Chili"
+        },
+        "backdrop": {
+          "name": "Marine Blue"
+        }
+      },
+      "send_date": 1792818000,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-kissedfrog-1204",
+      "gift": {
+        "gift_id": "fake-kissedfrog",
+        "base_name": "Kissed Frog",
+        "name": "KissedFrog-1204",
+        "number": 1204,
+        "model": {
+          "name": "Sea Breeze"
+        },
+        "symbol": {
+          "name": "Cat Mask"
+        },
+        "backdrop": {
+          "name": "Orange"
+        }
+      },
+      "send_date": 1792821600,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-kissedfrog-381",
+      "gift": {
+        "gift_id": "fake-kissedfrog",
+        "base_name": "Kissed Frog",
+        "name": "KissedFrog-381",
+        "number": 381,
+        "model": {
+          "name": "Ectobloom"
+        },
+        "symbol": {
+          "name": "Bull of Heaven"
+        },
+        "backdrop": {
+          "name": "Navy Blue"
+        }
+      },
+      "send_date": 1792825200,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-minioscar-383",
+      "gift": {
+        "gift_id": "fake-minioscar",
+        "base_name": "Mini Oscar",
+        "name": "MiniOscar-383",
+        "number": 383,
+        "model": {
+          "name": "Legionary"
+        },
+        "symbol": {
+          "name": "Coffee Bean"
+        },
+        "backdrop": {
+          "name": "Amber"
+        }
+      },
+      "send_date": 1792832400,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-nailbracelet-274",
+      "gift": {
+        "gift_id": "fake-nailbracelet",
+        "base_name": "Nail Bracelet",
+        "name": "NailBracelet-274",
+        "number": 274,
+        "model": {
+          "name": "Crypto Gem"
+        },
+        "symbol": {
+          "name": "Holy Grail"
+        },
+        "backdrop": {
+          "name": "Rifle Green"
+        }
+      },
+      "send_date": 1792836000,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-plushpepe-368",
+      "gift": {
+        "gift_id": "fake-plushpepe",
+        "base_name": "Plush Pepe",
+        "name": "PlushPepe-368",
+        "number": 368,
+        "model": {
+          "name": "Pumpkin"
+        },
+        "symbol": {
+          "name": "Flipper"
+        },
+        "backdrop": {
+          "name": "Copper"
+        }
+      },
+      "send_date": 1792839600,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-signetring-23",
+      "gift": {
+        "gift_id": "fake-signetring",
+        "base_name": "Signet Ring",
+        "name": "SignetRing-23",
+        "number": 23,
+        "model": {
+          "name": "Diamonds"
+        },
+        "symbol": {
+          "name": "Magic Wand"
+        },
+        "backdrop": {
+          "name": "Sapphire"
+        }
+      },
+      "send_date": 1792843200,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-signetring-640",
+      "gift": {
+        "gift_id": "fake-signetring",
+        "base_name": "Signet Ring",
+        "name": "SignetRing-640",
+        "number": 640,
+        "model": {
+          "name": "Emerald"
+        },
+        "symbol": {
+          "name": "Mountain Lion"
+        },
+        "backdrop": {
+          "name": "Cobalt Blue"
+        }
+      },
+      "send_date": 1792846800,
+      "can_be_transferred": true,
+      "transfer_star_count": 25,
+      "next_transfer_date": 1924992000
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-skullflower-239",
+      "gift": {
+        "gift_id": "fake-skullflower",
+        "base_name": "Skull Flower",
+        "name": "SkullFlower-239",
+        "number": 239,
+        "model": {
+          "name": "Vector"
+        },
+        "symbol": {
+          "name": "Flying Heart"
+        },
+        "backdrop": {
+          "name": "Mint Green"
+        }
+      },
+      "send_date": 1792850400,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-stellarrocket-179",
+      "gift": {
+        "gift_id": "fake-stellarrocket",
+        "base_name": "Stellar Rocket",
+        "name": "StellarRocket-179",
+        "number": 179,
+        "model": {
+          "name": "To The Moon"
+        },
+        "symbol": {
+          "name": "Star Crown"
+        },
+        "backdrop": {
+          "name": "Pistachio"
+        }
+      },
+      "send_date": 1792854000,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    },
+    {
+      "type": "unique",
+      "owned_gift_id": "fake-victorymedal-98",
+      "gift": {
+        "gift_id": "fake-victorymedal",
+        "base_name": "Victory Medal",
+        "name": "VictoryMedal-98",
+        "number": 98,
+        "model": {
+          "name": "Dealmaker"
+        },
+        "symbol": {
+          "name": "Champagne"
+        },
+        "backdrop": {
+          "name": "Onyx Black"
+        }
+      },
+      "send_date": 1792857600,
+      "can_be_transferred": true,
+      "transfer_star_count": 25
+    }
+  ]
+}

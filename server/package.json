@@ -1,0 +1,25 @@
+{
+  "name": "giftspin-server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "node --env-file=.env --watch src/index.ts",
+    "start": "node --env-file=.env src/index.ts",
+    "wallet:new": "node scripts/new-wallet.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ton/core": "0.63.1",
+    "@ton/crypto": "3.3.0",
+    "@ton/ton": "16.3.0",
+    "fastify": "5.12.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}
