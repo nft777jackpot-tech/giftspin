@@ -38,8 +38,8 @@ export const GAME_NAMES: Record<GameId, string> = {
 }
 
 /** Игры на личной паре сидов и игры с общим сидом раунда. */
-export const PERSONAL_GAMES: GameId[] = ['case', 'upgrade', 'dice', 'mines', 'plinko', 'contract']
-export const ROUND_GAMES: GameId[] = ['crash', 'roulette', 'coinflip', 'battle', 'jackpot']
+export const PERSONAL_GAMES: GameId[] = ['case', 'upgrade', 'dice', 'mines', 'plinko', 'contract', 'roulette']
+export const ROUND_GAMES: GameId[] = ['crash', 'coinflip', 'battle', 'jackpot']
 
 export interface VerifyInput {
   game: GameId

@@ -52,6 +52,8 @@ export interface ServerPlay {
   roll?: number
   path?: boolean[]
   slot?: number
+  cell?: number
+  color?: string
 }
 
 export interface FairInfo {

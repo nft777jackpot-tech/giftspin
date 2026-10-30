@@ -6,7 +6,7 @@ import { PageHead } from '../components/PageHead'
 import { toast } from '../components/Toaster'
 import { type FakePlayer } from '../data/players'
 import { fmtMult } from '../lib/format'
-import { ROULETTE_CELLS, rouletteMultiplier, type RouletteColor } from '../lib/rtp'
+import { ROULETTE_CELLS, rouletteCell, rouletteMultiplier, type RouletteColor } from '../lib/rtp'
 import { haptic } from '../lib/telegram'
 import { useStore } from '../state/store'
 
@@ -41,7 +41,7 @@ const emptyBets = (): Bets => ({ red: 0, green: 0, black: 0 })
 const emptyBots = (): Record<RouletteColor, BotBet[]> => ({ red: [], green: [], black: [] })
 
 export function Roulette() {
-  const { spend, credit, openSheet } = useStore()
+  const { playGame, balanceTon, openSheet } = useStore()
   const [phase, setPhase] = useState<Phase>('betting')
   const [bet, setBet] = useState(1)
   const [myBets, setMyBets] = useState<Bets>(emptyBets)
@@ -54,9 +54,10 @@ export function Roulette() {
   const reelRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<HTMLSpanElement>(null)
   const barRef = useRef<HTMLDivElement>(null)
-  const round = useRef({ phase: 'betting' as Phase, since: performance.now(), idx: 0, jitter: 0 })
-  const live = useRef({ myBets, credit })
-  live.current = { myBets, credit }
+  // reveal применяет выигрыш после остановки ленты; payout — сколько вернулось игроку
+  const round = useRef({ phase: 'betting' as Phase, since: performance.now(), idx: 0, jitter: 0, reveal: null as (() => void) | null, payout: 0 })
+  const live = useRef({ myBets, playGame })
+  live.current = { myBets, playGame }
 
   const offsetFor = (i: number, jitter: number) => {
     const w = reelRef.current?.clientWidth ?? 360
@@ -65,6 +66,7 @@ export function Roulette() {
 
   useEffect(() => {
     const timers: number[] = []
+    let alive = true
     const later = (fn: () => void, ms: number) => timers.push(window.setTimeout(fn, ms))
 
     const startBetting = () => {
@@ -82,12 +84,45 @@ export function Roulette() {
       later(startSpin, BET_MS)
     }
 
-    const startSpin = () => {
+    const startSpin = async () => {
       const r = round.current
       r.phase = 'spinning'
-      r.idx = Math.floor(Math.random() * N)
-      r.jitter = (Math.random() - 0.5) * CELL * 0.8
+      r.reveal = null
+      r.payout = 0
       setPhase('spinning')
+      // Без ставок лента крутится просто так. Со ставками ячейку выбирает сервер (или локальный сид в демо)
+      let idx = Math.floor(Math.random() * N)
+      const bets = live.current.myBets
+      const total = bets.red + bets.green + bets.black
+      if (total > 0) {
+        const outcome = await live.current.playGame({
+          kind: 'roulette',
+          bet: total,
+          label: 'Рулетка',
+          roundTitle: `Рулетка · ${COLORS.filter((c) => bets[c] > 0).map((c) => LABEL[c].toLowerCase()).join(', ')}`,
+          params: { red: bets.red.toFixed(9), green: bets.green.toFixed(9), black: bets.black.toFixed(9) },
+          floats: 1,
+          local: ([u]) => {
+            const cell = rouletteCell(u)
+            const color = ROULETTE_CELLS[cell]
+            const payout = bets[color] * MULT[color]
+            return { multiplier: payout / total, result: color, win: payout > 0, extra: { cell } }
+          },
+        })
+        if (!alive) return
+        if (outcome && outcome !== 'insufficient') {
+          idx = outcome.fields.cell as number
+          r.reveal = outcome.reveal
+          r.payout = total * outcome.multiplier
+        } else {
+          // Ставки не приняты: снимаем их с экрана, баланс не тронут
+          if (outcome === 'insufficient') toast('Не хватает баланса на ставки', 'error')
+          setMyBets(emptyBets())
+          live.current.myBets = emptyBets()
+        }
+      }
+      r.idx = idx
+      r.jitter = (Math.random() - 0.5) * CELL * 0.8
       setAnimate(true)
       setOffset(offsetFor(LAND_REP * N + r.idx, r.jitter))
       haptic.heavy()
@@ -101,13 +136,11 @@ export function Roulette() {
       setPhase('result')
       setWinColor(color)
       setResults((res) => [r.idx, ...res].slice(0, 20))
-      const myWin = live.current.myBets[color]
-      if (myWin > 0) {
-        const payout = myWin * MULT[color]
-        live.current.credit(payout, `Рулетка: ${LABEL[color].toLowerCase()}`)
+      r.reveal?.()
+      if (r.payout > 0) {
         haptic.success()
         toast(`Выигрыш ${fmtMult(MULT[color])} на ${LABEL[color].toLowerCase()}`, 'success')
-      } else if (Object.values(live.current.myBets).some((v) => v > 0)) {
+      } else if (r.reveal) {
         haptic.error()
       }
       later(startBetting, RESULT_MS)
@@ -130,14 +163,17 @@ export function Roulette() {
     raf = requestAnimationFrame(tick)
 
     return () => {
+      alive = false
       timers.forEach(clearTimeout)
       cancelAnimationFrame(raf)
     }
   }, [])
 
+  // Ставки копятся до запуска и списываются одним разом, когда лента начинает крутиться
+  const placed = myBets.red + myBets.green + myBets.black
   const placeBet = (color: RouletteColor) => {
     if (phase !== 'betting') return
-    if (!spend(bet, `Рулетка: ${LABEL[color].toLowerCase()}`)) {
+    if (bet <= 0 || placed + bet > balanceTon + 1e-9) {
       haptic.error()
       openSheet('deposit')
       return

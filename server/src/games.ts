@@ -3,11 +3,11 @@
 import { fromNano, toNano } from '@ton/core'
 import { q, transaction, type Row } from './db.ts'
 import { fairFloats, randomSeed, sha256Hex } from './fair.ts'
-import { caseOdds, DICE_MAX_CHANCE, DICE_MIN_CHANCE, diceMultiplier, diceRoll, diceWin, pickIndex, PLINKO_ROWS, plinkoMultipliers, plinkoPath, type PlinkoRisk, type PlinkoRows } from './gamemath.ts'
+import { caseOdds, DICE_MAX_CHANCE, DICE_MIN_CHANCE, diceMultiplier, diceRoll, diceWin, pickIndex, PLINKO_ROWS, plinkoMultipliers, plinkoPath, ROULETTE_CELLS, rouletteCell, rouletteMultiplier, type PlinkoRisk, type PlinkoRows, type RouletteColor } from './gamemath.ts'
 import { applyLedger, LedgerError } from './ledger.ts'
 
 /** Игры, которые считает сервер. Остальные пока на клиенте (только testnet), см. TRUST_CLIENT_GAMES. */
-export const SERVER_GAMES = ['dice', 'plinko', 'case'] as const
+export const SERVER_GAMES = ['dice', 'plinko', 'case', 'roulette'] as const
 
 const MAX_BET = toNano('1000')
 const REVEALED_KEEP = 20
@@ -81,6 +81,8 @@ export interface PlayResult {
 
 interface Computed {
   multiplier: number
+  /** Точная выплата в нанотонах, если она не равна ставка × множитель (например, ставки на несколько цветов). */
+  payout?: bigint
   result: string
   win: boolean
   /** Поля, нужные сайту для анимации, например путь шарика в плинко. */
@@ -98,12 +100,9 @@ function resolve(userId: number, kind: string, betNano: bigint, floatCount: numb
     const c = compute(floats)
     q('UPDATE game_seeds SET nonce = nonce + 1 WHERE user_id = ?').run(userId)
 
-    let payout = 0n
     let balance = q('SELECT balance_nano FROM users WHERE id = ?').get(userId)!.balance_nano as bigint
-    if (c.multiplier > 0) {
-      payout = (betNano * BigInt(Math.round(c.multiplier * 10000))) / 10000n
-      if (payout > 0n) balance = applyLedger(userId, 'win', payout, `${kind}:${nonce}`)
-    }
+    const payout = c.payout ?? (c.multiplier > 0 ? (betNano * BigInt(Math.round(c.multiplier * 10000))) / 10000n : 0n)
+    if (payout > 0n) balance = applyLedger(userId, 'win', payout, `${kind}:${nonce}`)
     return {
       multiplier: c.multiplier,
       payout: fromNano(payout),
@@ -137,6 +136,21 @@ export function playPlinko(userId: number, betNano: bigint, rows: PlinkoRows, ri
     const slot = path.filter(Boolean).length
     const mult = mults[slot]
     return { multiplier: mult, result: `x${mult}`, win: mult >= 1, extra: { path, slot } }
+  })
+}
+
+/**
+ * Рулетка: ставки на несколько цветов сразу, одна ячейка из сида. Выигрывает ставка на выпавший цвет
+ * по его множителю, остальные сгорают. Список ставок приходит одним запросом в момент запуска.
+ */
+export function playRoulette(userId: number, bets: Record<RouletteColor, bigint>): PlayResult {
+  const total = bets.red + bets.green + bets.black
+  return resolve(userId, 'roulette', total, 1, ([u]) => {
+    const cell = rouletteCell(u)
+    const color = ROULETTE_CELLS[cell]
+    const payout = (bets[color] * BigInt(Math.round(rouletteMultiplier(color) * 100))) / 100n
+    const multiplier = total > 0n ? Number((payout * 10000n) / total) / 10000 : 0
+    return { multiplier, payout, result: color, win: payout > 0n, extra: { cell, color } }
   })
 }
 

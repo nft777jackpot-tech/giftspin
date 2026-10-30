@@ -96,3 +96,13 @@ export function pickIndex(probs: number[], u: number): number {
   }
   return probs.length - 1
 }
+
+// ---------- Рулетка ----------
+export type RouletteColor = 'red' | 'black' | 'green'
+/** 15 ячеек: одна зелёная, по семь красных и чёрных через одну. */
+export const ROULETTE_CELLS: RouletteColor[] = ['green', ...Array.from({ length: 14 }, (_, i): RouletteColor => (i % 2 === 0 ? 'red' : 'black'))]
+export function rouletteMultiplier(color: RouletteColor): number {
+  const p = ROULETTE_CELLS.filter((c) => c === color).length / ROULETTE_CELLS.length
+  return Math.floor((rtp() / p) * 100) / 100
+}
+export const rouletteCell = (u: number) => Math.floor(u * ROULETTE_CELLS.length)

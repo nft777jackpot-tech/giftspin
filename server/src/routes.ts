@@ -5,7 +5,7 @@ import { authenticate, isAdmin } from './auth.ts'
 import { config, NETWORK, TON_CONNECT_CHAIN } from './config.ts'
 import type { Row } from './db.ts'
 import { unmatchedDeposits, userDeposits } from './deposits.ts'
-import { ensureSeeds, openCase, playDice, playPlinko, revealedSeeds, rotateSeeds, SERVER_GAMES } from './games.ts'
+import { ensureSeeds, openCase, playDice, playPlinko, playRoulette, revealedSeeds, rotateSeeds, SERVER_GAMES } from './games.ts'
 import { changeBalance, ensureUser, history, LedgerError, type User } from './ledger.ts'
 import { commentPayload, friendly, hotAddress, hotBalance } from './ton.ts'
 import type { TgUpdate } from './telegram.ts'
@@ -59,6 +59,13 @@ const giftOut = (g: Row) => ({
   status: g.status,
   error: g.error,
 })
+
+/** Ставка, которая может быть нулевой: пусто или 0 — ставки нет. */
+function parseStake(value: unknown): bigint {
+  const text = String(value ?? '').trim()
+  if (text === '' || Number(text) === 0) return 0n
+  return parseAmount(text)
+}
 
 function requireUser(req: FastifyRequest, reply: FastifyReply): User | null {
   const auth = authenticate(req)
@@ -191,6 +198,17 @@ export function registerRoutes(app: FastifyInstance) {
     if (!user) return
     try {
       return openCase(user.id, String(req.body?.caseId ?? ''), Number(req.body?.count ?? 1))
+    } catch (e) {
+      return fail(reply, e)
+    }
+  })
+
+  // Рулетка на сервере: все ставки раунда приходят одним запросом, ячейку выбирает сервер
+  app.post<{ Body: { red?: string; green?: string; black?: string } }>('/api/games/roulette', async (req, reply) => {
+    const user = requireUser(req, reply)
+    if (!user) return
+    try {
+      return playRoulette(user.id, { red: parseStake(req.body?.red), green: parseStake(req.body?.green), black: parseStake(req.body?.black) })
     } catch (e) {
       return fail(reply, e)
     }
