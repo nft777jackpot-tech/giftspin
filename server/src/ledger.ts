@@ -11,7 +11,7 @@ export interface User {
   balance: bigint
 }
 
-export type LedgerKind = 'deposit' | 'withdraw' | 'withdraw_refund' | 'bet' | 'win' | 'gift_deposit' | 'gift_sell'
+export type LedgerKind = 'deposit' | 'withdraw' | 'withdraw_refund' | 'bet' | 'win' | 'refund' | 'gift_deposit' | 'gift_sell'
 
 export class LedgerError extends Error {}
 

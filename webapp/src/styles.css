@@ -20,6 +20,9 @@
   --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --font-display: 'Unbounded', 'Inter', -apple-system, sans-serif;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  /* В полноэкранном режиме Telegram сверху строка состояния и его кнопки «Назад» и «…».
+     Их высоту Telegram передаёт в этих переменных, в обычном режиме они нулевые */
+  --tg-top: calc(var(--tg-safe-area-inset-top, 0px) + var(--tg-content-safe-area-inset-top, 0px));
   color-scheme: dark;
 }
 
@@ -84,13 +87,13 @@ h1, h2 { margin: 0; }
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 10px 16px;
+  padding: calc(10px + var(--tg-top)) 16px 10px;
   background: rgba(10, 13, 19, 0.78);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--line);
 }
-.brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 8px; min-width: 0; overflow: hidden; }
 .brand__logo {
   display: grid;
   place-items: center;
@@ -100,7 +103,7 @@ h1, h2 { margin: 0; }
   background: var(--accent-grad);
   box-shadow: 0 4px 14px -4px rgba(90, 110, 255, 0.7);
 }
-.brand__name { font-family: var(--font-display); font-size: 15px; font-weight: 700; }
+.brand__name { overflow: hidden; font-family: var(--font-display); font-size: 15px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .badge {
   padding: 2px 6px;
   border-radius: 6px;
@@ -111,7 +114,7 @@ h1, h2 { margin: 0; }
 }
 .badge--demo { background: rgba(255, 197, 66, 0.14); color: var(--gold); }
 
-.balance { display: flex; align-items: center; gap: 6px; }
+.balance { display: flex; flex: none; align-items: center; gap: 6px; }
 .balance__pill {
   display: flex;
   align-items: center;
@@ -470,8 +473,6 @@ h1, h2 { margin: 0; }
   font-size: 11px;
   font-weight: 600;
 }
-.game-tile--wide .game-tile__online { top: auto; right: auto; bottom: 14px; left: 14px; }
-.game-tile--wide .game-tile__text { padding-bottom: 26px; }
 .game-tile--wide { min-height: 150px; }
 .game-tile__art { position: absolute; top: 0; right: 0; bottom: 0; width: 50%; pointer-events: none; }
 .game-tile__gift { position: absolute; width: 92px; height: 92px; border-radius: 20px; box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.6); }
@@ -748,7 +749,7 @@ button.gift-card:active { transform: scale(0.97); }
 
 .toaster {
   position: fixed;
-  top: 64px;
+  top: calc(64px + var(--tg-top));
   left: 50%;
   z-index: 80;
   display: flex;
@@ -1204,7 +1205,7 @@ select.input { appearance: none; color: var(--text); }
 .event-banner__gift--b { right: 86px; bottom: 10px; width: 64px; height: 64px; transform: rotate(-10deg); animation-delay: -1.7s; }
 .event-banner__gift--c { right: 8px; bottom: -10px; width: 58px; height: 58px; animation-delay: -3s; }
 
-.quick-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.quick-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .quick { display: flex; align-items: center; justify-content: center; gap: 8px; height: 46px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); color: var(--ton); font-size: 13px; font-weight: 700; }
 .quick span { color: var(--text); }
 button.perk { text-align: left; }
@@ -1457,28 +1458,57 @@ code.ref-link { border-style: dashed; }
 .bg-toggle__text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; font-size: 14px; }
 .bg-toggle .toggle { height: auto; padding: 0; background: none; border: 0; }
 
-/* Летающие NFT за интерфейсом: между WebGL-фоном (z −10) и контентом */
-.float-layer { position: fixed; inset: 0; z-index: -5; overflow: hidden; pointer-events: none; }
+/* Объёмные NFT за интерфейсом: между WebGL-фоном (z −10) и контентом.
+   Каждый подарок в своей клетке экрана, качается и поворачивается в 3D; толщину дают тёмные слои позади */
+.float-layer { position: fixed; inset: 0; z-index: -5; overflow: hidden; pointer-events: none; perspective: 1200px; }
+.float-stage {
+  position: absolute;
+  inset: 0;
+  transform: rotateY(var(--px, 0deg)) rotateX(var(--py, 0deg));
+  transition: transform 0.8s ease-out;
+}
 .float-gift {
   position: absolute;
-  bottom: 0;
-  left: var(--x);
+  top: 0;
+  left: 0;
   width: var(--s);
   height: var(--s);
+  translate: var(--x) var(--y);
   opacity: var(--o);
+  perspective: 520px;
+  animation: float-in 0.9s ease-out both;
+  transition: opacity 0.9s ease, scale 0.9s ease;
+}
+.float-gift.is-leaving { opacity: 0; scale: 0.6; }
+@keyframes float-in {
+  from { opacity: 0; scale: 0.6; }
+}
+.float-gift__spin {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  animation: gift-sway var(--d) ease-in-out var(--delay) infinite alternate;
+  animation-direction: alternate;
+}
+@keyframes gift-sway {
+  from { transform: translateY(calc(var(--bob) * -1)) rotateY(calc(var(--ry) * -1)) rotateX(var(--rx)); }
+  to { transform: translateY(var(--bob)) rotateY(var(--ry)) rotateX(calc(var(--rx) * -1)); }
+}
+.float-gift__face,
+.float-gift__layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
-  filter: blur(var(--blur)) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.45));
-  animation: float-up var(--d) linear var(--delay) infinite;
-  will-change: transform;
 }
-.float-gift.is-empty { visibility: hidden; }
-@keyframes float-up {
-  from { transform: translate3d(0, 25vh, 0) rotate(var(--r0)); }
-  to { transform: translate3d(var(--dx), -115vh, 0) rotate(var(--r1)); }
-}
-/* При «уменьшить движение» подарки стоят на месте, а не улетают за экран */
+.float-gift__face { transform: translateZ(2px); filter: blur(var(--blur)) drop-shadow(0 10px 14px rgba(0, 0, 0, 0.45)); }
+.float-gift__layer { transform: translateZ(calc(var(--z) * -2px)); filter: brightness(0.32) blur(var(--blur)); }
+/* При «уменьшить движение» подарки стоят на месте */
 @media (prefers-reduced-motion: reduce) {
-  .float-gift { bottom: auto; top: calc(var(--x) * 0.9); animation: none !important; }
+  .float-gift__spin { animation: none; }
+  .float-stage { transition: none; }
 }
 
 /* ---------- Светлая основа фона ---------- */
@@ -1519,7 +1549,7 @@ code.ref-link { border-style: dashed; }
 :root[data-tone='light'] .tour-hero { color: #eef2f8; }
 :root[data-tone='light'] .tour-hero .tour-hero__label,
 :root[data-tone='light'] .tour-hero .tour-hero__timer { color: rgba(255, 255, 255, 0.75); }
-:root[data-tone='light'] .float-gift { filter: blur(var(--blur)) drop-shadow(0 8px 14px rgba(15, 25, 45, 0.25)); }
+:root[data-tone='light'] .float-gift__face { filter: blur(var(--blur)) drop-shadow(0 8px 14px rgba(15, 25, 45, 0.25)); }
 
 /* Открытие нескольких кейсов */
 .reels { display: flex; flex-direction: column; gap: 6px; }
@@ -1799,53 +1829,42 @@ code.ref-link { border-style: dashed; }
 .game-tile:not(.game-tile--wide) { justify-content: flex-start; gap: 10px; min-height: 164px; }
 /* Подпись переносится раньше, чем доходит до подарка в углу */
 .game-tile:not(.game-tile--wide) .game-tile__sub { max-width: 58%; }
-/* Значок PvP в верхнем ряду рядом с иконкой, чтобы название не переносилось */
-.game-tile:not(.game-tile--wide) .game-tile__badge { position: absolute; top: 25px; left: 62px; z-index: 2; margin: 0; }
+.game-tile__badge { white-space: nowrap; }
 .game-tile__text { position: relative; z-index: 2; text-shadow: 0 1px 8px rgba(0, 0, 0, 0.55); }
-.game-tile__online { z-index: 2; }
+/* Онлайн режима — в верхнем ряду рядом с иконкой: справа место занимает подарок */
+.game-tile .game-tile__online { top: 22px; right: auto; bottom: auto; left: 60px; z-index: 2; }
 
+/* Подарок выглядывает из-за правого края: крупный, по центру высоты, наклонён к подписи */
 .game-tile__model {
   position: absolute;
-  right: -10px;
-  bottom: -14px;
+  top: 50%;
+  right: -24%;
   z-index: 1;
-  width: clamp(78px, 52%, 104px);
+  width: 76%;
+  max-width: 150px;
   height: auto;
   aspect-ratio: 1;
-  rotate: -10deg;
-  transform-origin: 70% 70%;
-  filter: drop-shadow(0 8px 14px rgba(0, 0, 0, 0.5));
+  translate: 0 -48%;
+  rotate: -14deg;
+  transform-origin: 80% 50%;
+  filter: drop-shadow(-6px 10px 16px rgba(0, 0, 0, 0.55));
   pointer-events: none;
+  transition: translate 0.25s ease, rotate 0.25s ease, scale 0.25s ease;
 }
-.game-tile:nth-child(odd) .game-tile__model { rotate: 8deg; }
-
-/* Широкая плитка «Кейсы»: один крупный подарок в правом нижнем углу, отражённый зеркально.
-   Отражение через transform, а приближение через scale, поэтому они не мешают друг другу */
 .game-tile--wide { min-height: 158px; }
-.game-tile--wide .game-tile__art { width: 64%; }
-.game-tile__cluster { position: absolute; height: auto; aspect-ratio: 1; pointer-events: none; transform-origin: 50% 80%; filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.5)); }
-.game-tile__cluster--solo { right: 4%; bottom: -18px; width: clamp(124px, 52%, 150px); transform: scaleX(-1); rotate: 6deg; }
+.game-tile--wide .game-tile__model { right: -5%; width: 46%; max-width: 230px; translate: 0 -46%; rotate: -10deg; }
+/* Шлем высокий и узкий: чуть меньше наклон */
+.game-tile__model--heroichelmet { rotate: -8deg; }
 
-/* Шлем высокий: ставим глубже в угол и почти без наклона, чтобы не наезжал на подпись */
-/* Шлем крупнее и наклонён верхом вправо */
-.game-tile__model--heroichelmet { right: -12px; bottom: -14px; width: clamp(92px, 58%, 124px); rotate: 14deg; }
-
-.event-banner__gift,
-.hero__gift { object-fit: contain; filter: drop-shadow(0 12px 18px rgba(0, 0, 0, 0.5)); box-shadow: none; border-radius: 0; overflow: visible; }
-
-/* Приближение подарка при наведении на кнопку, нажатии и фокусе с клавиатуры */
+/* Подарок выглядывает сильнее при наведении, нажатии и фокусе с клавиатуры */
 @media (hover: hover) {
-  .game-tile:hover .game-tile__model,
-  .game-tile:hover .game-tile__cluster { scale: 1.12; filter: drop-shadow(0 14px 20px rgba(0, 0, 0, 0.55)); }
-  .game-tile:hover .game-tile__model { rotate: -4deg; }
-  .game-tile:nth-child(odd):hover .game-tile__model { rotate: 3deg; }
-  .game-tile:hover .game-tile__model--heroichelmet { rotate: 10deg; }
-  .event-banner:hover .event-banner__gift { scale: 1.08; }
+  .game-tile:hover .game-tile__model { translate: -14px -50%; rotate: -6deg; scale: 1.06; }
 }
-.game-tile:active .game-tile__model,
-.game-tile:active .game-tile__cluster { scale: 1.08; }
-.game-tile:focus-visible .game-tile__model,
-.game-tile:focus-visible .game-tile__cluster { scale: 1.12; }
+.game-tile:active .game-tile__model { translate: -10px -50%; scale: 1.04; }
+.game-tile:focus-visible .game-tile__model { translate: -14px -50%; rotate: -6deg; }
+@media (prefers-reduced-motion: reduce) {
+  .game-tile__model { transition: none; }
+}
 
 /* ---------- Настоящий кошелёк: тестовая сеть, ручной перевод, список выводов ---------- */
 .badge--testnet { background: rgba(34, 214, 138, 0.14); color: var(--green); }
@@ -1881,3 +1900,95 @@ code.ref-link { border-style: dashed; }
 .manual-transfer__qr .note { margin: 0; max-width: 280px; }
 .qr { display: block; border-radius: 12px; }
 .modal__note { position: relative; margin-top: 6px; color: var(--green); font-size: 13px; font-weight: 600; }
+
+/* ---------- Онлайн режима и живая лента ---------- */
+
+/* Мигающая зелёная точка и число игроков в режиме прямо сейчас */
+.online-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.32);
+  color: #d6ffe9;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.online-dot i {
+  display: inline-block;
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 0 rgba(34, 214, 138, 0.6);
+  animation: ping 1.6s infinite;
+}
+.game-tile__online { position: absolute; }
+/* Пока в режиме никого нет, точка серая и не мигает */
+.online-dot.is-empty i { background: var(--text-3); box-shadow: none; animation: none; }
+.online-dot.is-empty { color: var(--text-2); }
+.page-head .online-dot,
+.screen-title-row .online-dot { background: rgba(34, 214, 138, 0.12); color: var(--green); }
+.screen-title-row { display: flex; align-items: center; gap: 10px; }
+@media (prefers-reduced-motion: reduce) {
+  .online-dot i { animation: none; }
+}
+
+.live__track { overflow-x: auto; scrollbar-width: none; padding-right: 16px; }
+.live__track::-webkit-scrollbar { display: none; }
+.live__item--ton {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 64px;
+  height: 52px;
+  border-radius: 12px;
+  background: rgba(46, 167, 255, 0.12);
+  border: 1px solid rgba(46, 167, 255, 0.28);
+  color: var(--ton);
+}
+.live__item--ton b { color: var(--text); font-size: 12px; }
+.live__item--ton span { color: var(--text-3); font-size: 9.5px; max-width: 58px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.players__empty { padding: 6px 0 2px; }
+
+/* Сложность задания рядом с названием */
+.task__level { margin-left: 4px; padding: 1px 6px; border-radius: 6px; font-size: 10px; font-weight: 700; vertical-align: 1px; white-space: nowrap; }
+.task__level--easy { background: rgba(34, 214, 138, 0.14); color: var(--green); }
+.task__level--medium { background: rgba(255, 197, 66, 0.14); color: var(--gold); }
+.task__level--hard { background: rgba(255, 77, 103, 0.14); color: var(--red); }
+
+/* Очень узкий экран: остаётся только логотип, баланс и кнопка пополнения */
+@media (max-width: 340px) {
+  .brand__name,
+  .brand .badge { display: none; }
+}
+
+/* ---------- Компьютер ---------- */
+/* Широкое окно: главная, кейсы и инвентарь раскладываются в несколько колонок, страницы игр — по центру
+   не шире 760 px, нижнее меню — плавающая панель */
+@media (min-width: 900px) {
+  .app { max-width: 1120px; }
+  .topbar { padding-left: 24px; padding-right: 24px; }
+  .main { padding: 0 24px calc(110px + var(--safe-bottom)); }
+  .screen:not(.screen--wide) { width: 100%; max-width: 760px; margin: 0 auto; }
+  .games-grid { grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .games-grid .game-tile--wide { grid-column: span 2; grid-row: span 2; }
+  .game-tile { min-height: 160px; }
+  .cases-grid { grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .gift-grid { grid-template-columns: repeat(5, 1fr); }
+  .quick-row { max-width: 720px; }
+  .tabbar { bottom: 16px; max-width: 560px; border: 1px solid var(--line-2); border-radius: 22px; padding-bottom: 8px; box-shadow: 0 18px 40px -16px rgba(0, 0, 0, 0.7); }
+  .tabbar__item { cursor: pointer; }
+}
+@media (min-width: 1200px) {
+  .cases-grid { grid-template-columns: repeat(5, 1fr); }
+  .gift-grid { grid-template-columns: repeat(6, 1fr); }
+}

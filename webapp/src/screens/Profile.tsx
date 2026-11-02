@@ -12,7 +12,6 @@ import {
   IconShield,
   IconTasks,
   IconTicket,
-  IconTrophy,
   IconUsers,
 } from '../components/icons'
 import { Money } from '../components/Money'
@@ -88,7 +87,6 @@ export function Profile() {
 
       <div className="menu">
         <Row icon={<IconTasks size={18} />} label={t('Задания')} onClick={() => open({ name: 'tasks' })} />
-        <Row icon={<IconTrophy size={18} />} label={t('Турнир недели')} onClick={() => open({ name: 'tournament' })} />
         <Row icon={<IconUsers size={18} />} label={t('Пригласить друзей')} value={`${Math.round(REF_SHARE * 100)}%`} onClick={() => open({ name: 'referrals' })} />
         <Row icon={<IconTicket size={18} />} label={t('Промокод')} value={promo ?? undefined} onClick={() => openSheet('promo')} />
       </div>

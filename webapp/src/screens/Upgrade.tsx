@@ -1,3 +1,4 @@
+import { OnlineDot } from '../components/OnlineDot'
 import { useMemo, useState } from 'react'
 import { BetInput } from '../components/BetInput'
 import { GiftCard } from '../components/GiftCard'
@@ -103,7 +104,10 @@ export function Upgrade() {
 
   return (
     <div className="screen">
-      <h1 className="screen-title">Апгрейд</h1>
+      <div className="screen-title-row">
+        <h1 className="screen-title">Апгрейд</h1>
+        <OnlineDot room="upgrade" here />
+      </div>
       <p className="screen-sub">Поставьте подарки или TON и выберите подарок дороже</p>
 
       <div className="upgrade-dial">

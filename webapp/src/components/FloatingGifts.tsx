@@ -1,136 +1,206 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
-import { cachedModels, loadModel, type GiftModel } from '../lib/giftModels'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { GIFTS } from '../data/gifts'
 
-const SLOTS = 12
-/** Сколько разных моделей держим в ротации: чем больше пул, тем реже повторы. */
-const POOL_TARGET = 36
-// Номера до 800 есть почти во всех коллекциях, отсутствующие просто пропускаются
-const MAX_NUM = 800
+/**
+ * Объёмные NFT-подарки за интерфейсом. Экран делится на клетки, в каждой — не больше одного подарка,
+ * поэтому они не налезают друг на друга и покрывают весь фон, а не только середину. Подарки медленно
+ * покачиваются и поворачиваются в 3D, у каждого есть толщина. Раз в пару секунд один подарок тает
+ * и появляется в другой свободной клетке уже другой моделью из любой коллекции Telegram.
+ */
 
-const COLLECTIONS = [
-  'plushpepe', 'heartlocket', 'durovscap', 'preciouspeach', 'mightyarm', 'astralshard', 'lootbag', 'scaredcat',
-  'magicpotion', 'genielamp', 'lowrider', 'swisswatch', 'kissedfrog', 'signetring', 'nekohelmet', 'vintagecigar',
-  'toybear', 'eternalrose', 'diamondring', 'lovepotion', 'tophat', 'crystalball', 'sakuraflower', 'jellybunny',
-  'witchhat', 'hexpot', 'spyagaric', 'skullflower',
-]
+/** Модели коллекции: [название, хеш картинки, сколько экземпляров] — файл собирает scripts/fragment-catalog.mjs. */
+type ModelRow = [string, string, number]
 
-function shuffle<T>(list: T[]): T[] {
-  const a = [...list]
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[a[i], a[j]] = [a[j], a[i]]
+const CELL_W = 118
+const CELL_H = 132
+/** Доля клеток, где одновременно есть подарок: остальные — воздух между ними. */
+const FILL = 0.62
+const SWAP_MS = 2400
+const FADE_MS = 900
+/** Слои толщины: копии картинки чуть глубже и темнее, видны, когда подарок поворачивается боком. */
+const DEPTH_LAYERS = 4
+
+const COLLECTIONS = GIFTS.map((g) => g.id)
+const modelLists = new Map<string, Promise<ModelRow[]>>()
+
+function modelsOf(slug: string): Promise<ModelRow[]> {
+  let p = modelLists.get(slug)
+  if (!p) {
+    p = fetch(`${import.meta.env.BASE_URL}models/${slug}.json`)
+      .then((r) => (r.ok ? r.json() : []))
+      .catch(() => [])
+    modelLists.set(slug, p)
   }
-  return a
+  return p
 }
 
-function slotStyle(i: number): CSSProperties {
-  // Мелкие подарки дальше: прозрачнее, размытее и медленнее
+const shown = new Set<string>()
+
+/** Случайная модель случайной коллекции, которую ещё не показывали. Картинка уже загружена. */
+async function randomModel(): Promise<string | null> {
+  for (let tries = 0; tries < 6; tries++) {
+    const slug = COLLECTIONS[Math.floor(Math.random() * COLLECTIONS.length)]
+    const list = await modelsOf(slug)
+    if (!list.length) continue
+    const [, hash] = list[Math.floor(Math.random() * list.length)]
+    const src = `https://fragment.com/file/gifts/${slug}/model.${hash}.webp`
+    if (shown.has(src)) continue
+    const ok = await new Promise<boolean>((res) => {
+      const img = new Image()
+      img.onload = () => res(true)
+      img.onerror = () => res(false)
+      img.src = src
+    })
+    if (!ok) continue
+    shown.add(src)
+    if (shown.size > 400) shown.delete(shown.values().next().value!)
+    return src
+  }
+  return null
+}
+
+interface Slot {
+  key: number
+  cell: number
+  src: string
+  leaving: boolean
+  style: CSSProperties
+}
+
+let keySeq = 0
+
+/** Положение и движение подарка внутри клетки: случайный сдвиг, глубина, наклоны и скорость. */
+function slotStyle(cell: number, cols: number, cellW: number, cellH: number): CSSProperties {
+  const col = cell % cols
+  const row = Math.floor(cell / cols)
+  // Дальние подарки мельче, прозрачнее и размытее
   const depth = Math.random()
-  const size = 40 + depth * 52
-  const duration = 34 - depth * 14 + Math.random() * 6
+  const size = Math.round(Math.min(cellW, cellH) * (0.42 + depth * 0.28))
+  const room = (n: number) => Math.max(0, n - size) * (0.15 + Math.random() * 0.7)
   return {
-    '--x': `${(i / SLOTS) * 100 + Math.random() * 6 - 3}%`,
+    '--x': `${col * cellW + room(cellW)}px`,
+    '--y': `${row * cellH + room(cellH)}px`,
     '--s': `${size}px`,
-    '--o': 0.12 + depth * 0.18,
-    '--blur': `${(1 - depth) * 2.5}px`,
-    '--d': `${duration}s`,
-    '--delay': `${-Math.random() * duration}s`,
-    '--dx': `${(Math.random() - 0.5) * 120}px`,
-    '--r0': `${(Math.random() - 0.5) * 40}deg`,
-    '--r1': `${(Math.random() - 0.5) * 120}deg`,
+    '--o': (0.32 + depth * 0.4).toFixed(2),
+    '--blur': `${((1 - depth) * 1.2).toFixed(2)}px`,
+    '--ry': `${Math.round(18 + Math.random() * 26)}deg`,
+    '--rx': `${Math.round(6 + Math.random() * 10)}deg`,
+    '--bob': `${Math.round(5 + Math.random() * 7)}px`,
+    '--d': `${(7 + Math.random() * 6).toFixed(1)}s`,
+    '--delay': `${(-Math.random() * 10).toFixed(1)}s`,
+    '--dir': Math.random() < 0.5 ? 'normal' : 'reverse',
   } as CSSProperties
 }
 
-/**
- * Подарки разных моделей медленно всплывают за интерфейсом. Модель меняется, когда подарок
- * уходит за верх экрана, и берётся из пула по кругу, поэтому повтор бывает только после
- * того, как показан весь пул. Слой не ловит касания и лежит между фоном и контентом.
- */
+function grid() {
+  const w = window.innerWidth
+  const h = window.innerHeight
+  const cols = Math.max(2, Math.round(w / CELL_W))
+  const rows = Math.max(3, Math.round(h / CELL_H))
+  return { cols, rows, cellW: w / cols, cellH: h / rows }
+}
+
 export function FloatingGifts() {
-  const styles = useMemo(() => Array.from({ length: SLOTS }, (_, i) => slotStyle(i)), [])
-  const [slots, setSlots] = useState<(GiftModel | null)[]>(() => Array(SLOTS).fill(null))
-  const pool = useRef<GiftModel[]>([])
-  const queue = useRef<GiftModel[]>([])
+  const [slots, setSlots] = useState<Slot[]>([])
+  const layout = useRef(grid())
   const slotsRef = useRef(slots)
   slotsRef.current = slots
-
-  /** Следующая модель по кругу, которой сейчас нет на экране и которая не из той же коллекции, что соседи. */
-  const next = (exclude: (GiftModel | null)[]): GiftModel | null => {
-    const onScreen = new Set(exclude.filter(Boolean).map((m) => m!.hash))
-    for (let tries = 0; tries < pool.current.length * 2; tries++) {
-      if (!queue.current.length) queue.current = shuffle(pool.current)
-      const m = queue.current.shift()!
-      if (!onScreen.has(m.hash)) return m
-    }
-    return pool.current[0] ?? null
-  }
-
-  const addToPool = (m: GiftModel) => {
-    if (pool.current.some((x) => x.hash === m.hash)) return
-    pool.current.push(m)
-    queue.current.push(m)
-    // Пустые места заполняем сразу, как только появилась новая модель
-    setSlots((list) => {
-      const i = list.indexOf(null)
-      if (i < 0) return list
-      const copy = [...list]
-      copy[i] = next(copy)
-      return copy
-    })
-  }
+  const stageRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let alive = true
-    cachedModels().forEach(addToPool)
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-    // Кандидаты идут по кругу через перемешанные коллекции, так рядом не оказываются одинаковые
-    const run = async () => {
-      let order = shuffle(COLLECTIONS)
-      let k = 0
-      let misses = 0
-      while (alive && pool.current.length < POOL_TARGET && misses < 40) {
-        if (k >= order.length) {
-          order = shuffle(COLLECTIONS)
-          k = 0
-        }
-        const slug = order[k++]
-        const model = await loadModel(slug, 1 + Math.floor(Math.random() * MAX_NUM))
-        if (!alive) return
-        if (model && !pool.current.some((x) => x.hash === model.hash)) addToPool(model)
-        else misses++
-        // Пауза между моделями, чтобы отрисовка не мешала интерфейсу
-        await new Promise((r) => setTimeout(r, pool.current.length < SLOTS ? 50 : 600))
+    const freeCell = (taken: Set<number>): number | null => {
+      const { cols, rows } = layout.current
+      const free = Array.from({ length: cols * rows }, (_, i) => i).filter((i) => !taken.has(i))
+      return free.length ? free[Math.floor(Math.random() * free.length)] : null
+    }
+
+    const spawn = async (avoid?: number) => {
+      const src = await randomModel()
+      if (!alive || !src) return
+      setSlots((list) => {
+        const taken = new Set(list.map((s) => s.cell))
+        if (avoid !== undefined) taken.add(avoid)
+        const cell = freeCell(taken)
+        if (cell === null) return list
+        const { cols, cellW, cellH } = layout.current
+        return [...list, { key: ++keySeq, cell, src, leaving: false, style: slotStyle(cell, cols, cellW, cellH) }]
+      })
+    }
+
+    // Первое заполнение: часть клеток, по одной модели с небольшой паузой
+    const fillUp = async () => {
+      const { cols, rows } = layout.current
+      const target = Math.round(cols * rows * FILL)
+      for (let i = slotsRef.current.length; i < target && alive; i++) {
+        await spawn()
+        await new Promise((r) => setTimeout(r, 120))
       }
     }
-    run()
+    fillUp()
+
+    // Смена: самый старый подарок тает, новый появляется в другой свободной клетке
+    const timer = reduce
+      ? 0
+      : window.setInterval(() => {
+          const list = slotsRef.current.filter((s) => !s.leaving)
+          if (!list.length) return
+          const old = list[0]
+          setSlots((l) => l.map((s) => (s.key === old.key ? { ...s, leaving: true } : s)))
+          window.setTimeout(() => alive && setSlots((l) => l.filter((s) => s.key !== old.key)), FADE_MS)
+          spawn(old.cell)
+        }, SWAP_MS)
+
+    // Экран повернули или изменили окно — раскладываем заново
+    let resizeTimer = 0
+    const onResize = () => {
+      window.clearTimeout(resizeTimer)
+      resizeTimer = window.setTimeout(() => {
+        const next = grid()
+        const prev = layout.current
+        if (next.cols === prev.cols && next.rows === prev.rows) return
+        layout.current = next
+        setSlots([])
+        fillUp()
+      }, 300)
+    }
+    window.addEventListener('resize', onResize)
+
+    // Лёгкий параллакс за курсором на компьютере: вся сцена чуть поворачивается
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse' || !stageRef.current) return
+      const kx = e.clientX / window.innerWidth - 0.5
+      const ky = e.clientY / window.innerHeight - 0.5
+      stageRef.current.style.setProperty('--px', `${(kx * 8).toFixed(2)}deg`)
+      stageRef.current.style.setProperty('--py', `${(-ky * 6).toFixed(2)}deg`)
+    }
+    if (!reduce) window.addEventListener('pointermove', onMove)
+
     return () => {
       alive = false
+      window.clearInterval(timer)
+      window.clearTimeout(resizeTimer)
+      window.removeEventListener('resize', onResize)
+      window.removeEventListener('pointermove', onMove)
     }
-    // Пул собирается один раз за время жизни слоя
   }, [])
-
-  const swap = (i: number) => {
-    setSlots((list) => {
-      const copy = [...list]
-      copy[i] = next(copy.filter((_, k) => k !== i)) ?? copy[i]
-      return copy
-    })
-  }
 
   return (
     <div className="float-layer" aria-hidden>
-      {slots.map((m, i) => (
-        <img
-          key={i}
-          className={`float-gift ${m ? '' : 'is-empty'}`}
-          style={styles[i]}
-          src={m?.src}
-          alt=""
-          draggable={false}
-          // Подарок ушёл за верх экрана — следующий круг он пролетит другой моделью
-          onAnimationIteration={() => swap(i)}
-        />
-      ))}
+      <div className="float-stage" ref={stageRef}>
+        {slots.map((s) => (
+          <div key={s.key} className={`float-gift ${s.leaving ? 'is-leaving' : ''}`} style={s.style}>
+            <div className="float-gift__spin">
+              {Array.from({ length: DEPTH_LAYERS }, (_, i) => (
+                <img key={i} className="float-gift__layer" style={{ '--z': i } as CSSProperties} src={s.src} alt="" draggable={false} />
+              ))}
+              <img className="float-gift__face" src={s.src} alt="" draggable={false} />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

@@ -1,0 +1,617 @@
+[
+ {
+  "id": "plushpepe",
+  "name": "Plush Pepe",
+  "price": 7000
+ },
+ {
+  "id": "algorithmcup",
+  "name": "Algorithm Cup",
+  "price": 3450
+ },
+ {
+  "id": "intelligencecup",
+  "name": "Intelligence Cup",
+  "price": 3099
+ },
+ {
+  "id": "heartlocket",
+  "name": "Heart Locket",
+  "price": 1444
+ },
+ {
+  "id": "resistancedog",
+  "name": "Resistance Dog",
+  "price": 790
+ },
+ {
+  "id": "durovscap",
+  "name": "Durov’s Cap",
+  "price": 470
+ },
+ {
+  "id": "preciouspeach",
+  "name": "Precious Peach",
+  "price": 300
+ },
+ {
+  "id": "scaredcat",
+  "name": "Scared Cat",
+  "price": 290
+ },
+ {
+  "id": "heroichelmet",
+  "name": "Heroic Helmet",
+  "price": 199
+ },
+ {
+  "id": "durovsglasses",
+  "name": "Durov’s Glasses",
+  "price": 159
+ },
+ {
+  "id": "mightyarm",
+  "name": "Mighty Arm",
+  "price": 150
+ },
+ {
+  "id": "nailbracelet",
+  "name": "Nail Bracelet",
+  "price": 149
+ },
+ {
+  "id": "astralshard",
+  "name": "Astral Shard",
+  "price": 147
+ },
+ {
+  "id": "lootbag",
+  "name": "Loot Bag",
+  "price": 141
+ },
+ {
+  "id": "westsidesign",
+  "name": "Westside Sign",
+  "price": 128
+ },
+ {
+  "id": "luckylocket",
+  "name": "Lucky Locket",
+  "price": 99
+ },
+ {
+  "id": "perfumebottle",
+  "name": "Perfume Bottle",
+  "price": 86
+ },
+ {
+  "id": "artisanbrick",
+  "name": "Artisan Brick",
+  "price": 85
+ },
+ {
+  "id": "iongem",
+  "name": "Ion Gem",
+  "price": 85
+ },
+ {
+  "id": "minioscar",
+  "name": "Mini Oscar",
+  "price": 78
+ },
+ {
+  "id": "magicpotion",
+  "name": "Magic Potion",
+  "price": 75
+ },
+ {
+  "id": "gemsignet",
+  "name": "Gem Signet",
+  "price": 72
+ },
+ {
+  "id": "lowrider",
+  "name": "Low Rider",
+  "price": 69
+ },
+ {
+  "id": "swisswatch",
+  "name": "Swiss Watch",
+  "price": 65
+ },
+ {
+  "id": "kissedfrog",
+  "name": "Kissed Frog",
+  "price": 56
+ },
+ {
+  "id": "sharptongue",
+  "name": "Sharp Tongue",
+  "price": 55
+ },
+ {
+  "id": "vintagecigar",
+  "name": "Vintage Cigar",
+  "price": 46
+ },
+ {
+  "id": "nekohelmet",
+  "name": "Neko Helmet",
+  "price": 45
+ },
+ {
+  "id": "bondedring",
+  "name": "Bonded Ring",
+  "price": 44
+ },
+ {
+  "id": "voodoodoll",
+  "name": "Voodoo Doll",
+  "price": 43
+ },
+ {
+  "id": "genielamp",
+  "name": "Genie Lamp",
+  "price": 40
+ },
+ {
+  "id": "signetring",
+  "name": "Signet Ring",
+  "price": 38
+ },
+ {
+  "id": "toybear",
+  "name": "Toy Bear",
+  "price": 38
+ },
+ {
+  "id": "diamondring",
+  "name": "Diamond Ring",
+  "price": 36
+ },
+ {
+  "id": "electricskull",
+  "name": "Electric Skull",
+  "price": 35
+ },
+ {
+  "id": "eternalrose",
+  "name": "Eternal Rose",
+  "price": 35
+ },
+ {
+  "id": "rarebird",
+  "name": "Rare Bird",
+  "price": 30
+ },
+ {
+  "id": "blingbinky",
+  "name": "Bling Binky",
+  "price": 29
+ },
+ {
+  "id": "cupidcharm",
+  "name": "Cupid Charm",
+  "price": 27
+ },
+ {
+  "id": "khabibspapakha",
+  "name": "Khabib’s Papakha",
+  "price": 27
+ },
+ {
+  "id": "madpumpkin",
+  "name": "Mad Pumpkin",
+  "price": 21
+ },
+ {
+  "id": "skystilettos",
+  "name": "Sky Stilettos",
+  "price": 20
+ },
+ {
+  "id": "ionicdryer",
+  "name": "Ionic Dryer",
+  "price": 19
+ },
+ {
+  "id": "snoopcigar",
+  "name": "Snoop Cigar",
+  "price": 19
+ },
+ {
+  "id": "ufcstrike",
+  "name": "UFC Strike",
+  "price": 19
+ },
+ {
+  "id": "trappedheart",
+  "name": "Trapped Heart",
+  "price": 18
+ },
+ {
+  "id": "lovepotion",
+  "name": "Love Potion",
+  "price": 16
+ },
+ {
+  "id": "crystalball",
+  "name": "Crystal Ball",
+  "price": 15
+ },
+ {
+  "id": "skullflower",
+  "name": "Skull Flower",
+  "price": 15
+ },
+ {
+  "id": "flyingbroom",
+  "name": "Flying Broom",
+  "price": 14
+ },
+ {
+  "id": "sleighbell",
+  "name": "Sleigh Bell",
+  "price": 14
+ },
+ {
+  "id": "recordplayer",
+  "name": "Record Player",
+  "price": 13
+ },
+ {
+  "id": "valentinebox",
+  "name": "Valentine Box",
+  "price": 13
+ },
+ {
+  "id": "jinglebells",
+  "name": "Jingle Bells",
+  "price": 12
+ },
+ {
+  "id": "lovecandle",
+  "name": "Love Candle",
+  "price": 12
+ },
+ {
+  "id": "sakuraflower",
+  "name": "Sakura Flower",
+  "price": 12
+ },
+ {
+  "id": "hangingstar",
+  "name": "Hanging Star",
+  "price": 11
+ },
+ {
+  "id": "joyfulbundle",
+  "name": "Joyful Bundle",
+  "price": 11
+ },
+ {
+  "id": "tophat",
+  "name": "Top Hat",
+  "price": 11
+ },
+ {
+  "id": "berrybox",
+  "name": "Berry Box",
+  "price": 10
+ },
+ {
+  "id": "snowmittens",
+  "name": "Snow Mittens",
+  "price": 10
+ },
+ {
+  "id": "witchhat",
+  "name": "Witch Hat",
+  "price": 10
+ },
+ {
+  "id": "bunnymuffin",
+  "name": "Bunny Muffin",
+  "price": 9
+ },
+ {
+  "id": "evileye",
+  "name": "Evil Eye",
+  "price": 9
+ },
+ {
+  "id": "finepen",
+  "name": "Fine Pen",
+  "price": 9
+ },
+ {
+  "id": "jellybunny",
+  "name": "Jelly Bunny",
+  "price": 9
+ },
+ {
+  "id": "surgeboard",
+  "name": "Surge Board",
+  "price": 9
+ },
+ {
+  "id": "inputkey",
+  "name": "Input Key",
+  "price": 8
+ },
+ {
+  "id": "jollychimp",
+  "name": "Jolly Chimp",
+  "price": 8
+ },
+ {
+  "id": "bowtie",
+  "name": "Bow Tie",
+  "price": 7
+ },
+ {
+  "id": "deskcalendar",
+  "name": "Desk Calendar",
+  "price": 7
+ },
+ {
+  "id": "eternalcandle",
+  "name": "Eternal Candle",
+  "price": 7
+ },
+ {
+  "id": "faithamulet",
+  "name": "Faith Amulet",
+  "price": 7
+ },
+ {
+  "id": "hexpot",
+  "name": "Hex Pot",
+  "price": 7
+ },
+ {
+  "id": "lightsword",
+  "name": "Light Sword",
+  "price": 7
+ },
+ {
+  "id": "lushbouquet",
+  "name": "Lush Bouquet",
+  "price": 7
+ },
+ {
+  "id": "moonpendant",
+  "name": "Moon Pendant",
+  "price": 7
+ },
+ {
+  "id": "santahat",
+  "name": "Santa Hat",
+  "price": 7
+ },
+ {
+  "id": "snowglobe",
+  "name": "Snow Globe",
+  "price": 7
+ },
+ {
+  "id": "springbasket",
+  "name": "Spring Basket",
+  "price": 7
+ },
+ {
+  "id": "spyagaric",
+  "name": "Spy Agaric",
+  "price": 7
+ },
+ {
+  "id": "cloverpin",
+  "name": "Clover Pin",
+  "price": 6
+ },
+ {
+  "id": "cookieheart",
+  "name": "Cookie Heart",
+  "price": 6
+ },
+ {
+  "id": "freshsocks",
+  "name": "Fresh Socks",
+  "price": 6
+ },
+ {
+  "id": "gingercookie",
+  "name": "Ginger Cookie",
+  "price": 6
+ },
+ {
+  "id": "homemadecake",
+  "name": "Homemade Cake",
+  "price": 6
+ },
+ {
+  "id": "jackinthebox",
+  "name": "Jack-in-the-Box",
+  "price": 6
+ },
+ {
+  "id": "libertyfigure",
+  "name": "Liberty Figure",
+  "price": 6
+ },
+ {
+  "id": "moneypot",
+  "name": "Money Pot",
+  "price": 6
+ },
+ {
+  "id": "moussecake",
+  "name": "Mousse Cake",
+  "price": 6
+ },
+ {
+  "id": "partysparkler",
+  "name": "Party Sparkler",
+  "price": 6
+ },
+ {
+  "id": "prettyposy",
+  "name": "Pretty Posy",
+  "price": 6
+ },
+ {
+  "id": "restlessjar",
+  "name": "Restless Jar",
+  "price": 6
+ },
+ {
+  "id": "snoopdogg",
+  "name": "Snoop Dogg",
+  "price": 6
+ },
+ {
+  "id": "spicedwine",
+  "name": "Spiced Wine",
+  "price": 6
+ },
+ {
+  "id": "stellarrocket",
+  "name": "Stellar Rocket",
+  "price": 6
+ },
+ {
+  "id": "swagbag",
+  "name": "Swag Bag",
+  "price": 6
+ },
+ {
+  "id": "victorymedal",
+  "name": "Victory Medal",
+  "price": 6
+ },
+ {
+  "id": "winterwreath",
+  "name": "Winter Wreath",
+  "price": 6
+ },
+ {
+  "id": "bdaycandle",
+  "name": "B-Day Candle",
+  "price": 5
+ },
+ {
+  "id": "bigyear",
+  "name": "Big Year",
+  "price": 5
+ },
+ {
+  "id": "candycane",
+  "name": "Candy Cane",
+  "price": 5
+ },
+ {
+  "id": "chillflame",
+  "name": "Chill Flame",
+  "price": 5
+ },
+ {
+  "id": "easteregg",
+  "name": "Easter Egg",
+  "price": 5
+ },
+ {
+  "id": "happybrownie",
+  "name": "Happy Brownie",
+  "price": 5
+ },
+ {
+  "id": "holidaydrink",
+  "name": "Holiday Drink",
+  "price": 5
+ },
+ {
+  "id": "hypnolollipop",
+  "name": "Hypno Lollipop",
+  "price": 5
+ },
+ {
+  "id": "icecream",
+  "name": "Ice Cream",
+  "price": 5
+ },
+ {
+  "id": "instantramen",
+  "name": "Instant Ramen",
+  "price": 5
+ },
+ {
+  "id": "jesterhat",
+  "name": "Jester Hat",
+  "price": 5
+ },
+ {
+  "id": "lolpop",
+  "name": "Lol Pop",
+  "price": 5
+ },
+ {
+  "id": "lunarsnake",
+  "name": "Lunar Snake",
+  "price": 5
+ },
+ {
+  "id": "miragelamp",
+  "name": "Mirage Lamp",
+  "price": 5
+ },
+ {
+  "id": "moodpack",
+  "name": "Mood Pack",
+  "price": 5
+ },
+ {
+  "id": "petsnake",
+  "name": "Pet Snake",
+  "price": 5
+ },
+ {
+  "id": "poolfloat",
+  "name": "Pool Float",
+  "price": 5
+ },
+ {
+  "id": "snakebox",
+  "name": "Snake Box",
+  "price": 5
+ },
+ {
+  "id": "starnotepad",
+  "name": "Star Notepad",
+  "price": 5
+ },
+ {
+  "id": "tamagadget",
+  "name": "Tama Gadget",
+  "price": 5
+ },
+ {
+  "id": "timelessbook",
+  "name": "Timeless Book",
+  "price": 5
+ },
+ {
+  "id": "vicecream",
+  "name": "Vice Cream",
+  "price": 5
+ },
+ {
+  "id": "whipcupcake",
+  "name": "Whip Cupcake",
+  "price": 5
+ },
+ {
+  "id": "xmasstocking",
+  "name": "Xmas Stocking",
+  "price": 5
+ }
+]

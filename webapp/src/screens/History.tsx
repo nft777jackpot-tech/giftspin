@@ -7,6 +7,7 @@ const KIND: Record<Tx['kind'], string> = {
   withdraw: 'Вывод',
   bet: 'Ставка',
   win: 'Выигрыш',
+  refund: 'Возврат',
   sell: 'Продажа',
   bonus: 'Бонус',
   ref: 'Рефералы',

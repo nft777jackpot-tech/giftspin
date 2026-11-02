@@ -2,10 +2,13 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { readFileSync } from 'node:fs'
 import { fromNano, toNano } from '@ton/core'
 import { authenticate, isAdmin } from './auth.ts'
+import { cancelCrashBet, cashOutCrash, crashHistory, placeCrashBet } from './crash.ts'
+import { publishUserWin, rememberPhoto } from './live.ts'
 import { config, NETWORK, TON_CONNECT_CHAIN } from './config.ts'
 import type { Row } from './db.ts'
 import { unmatchedDeposits, userDeposits } from './deposits.ts'
-import { ensureSeeds, openCase, playDice, playPlinko, playRoulette, revealedSeeds, rotateSeeds, SERVER_GAMES } from './games.ts'
+import { ensureSeeds, openCase, playDice, playPlinko, revealedSeeds, rotateSeeds, SERVER_GAMES } from './games.ts'
+import { placeRouletteBet, rouletteHistory } from './roulette.ts'
 import { changeBalance, ensureUser, history, LedgerError, type User } from './ledger.ts'
 import { commentPayload, friendly, hotAddress, hotBalance } from './ton.ts'
 import type { TgUpdate } from './telegram.ts'
@@ -60,19 +63,13 @@ const giftOut = (g: Row) => ({
   error: g.error,
 })
 
-/** Ставка, которая может быть нулевой: пусто или 0 — ставки нет. */
-function parseStake(value: unknown): bigint {
-  const text = String(value ?? '').trim()
-  if (text === '' || Number(text) === 0) return 0n
-  return parseAmount(text)
-}
-
 function requireUser(req: FastifyRequest, reply: FastifyReply): User | null {
   const auth = authenticate(req)
   if (!auth) {
     reply.code(401).send({ error: 'Нужен вход через Telegram' })
     return null
   }
+  rememberPhoto(auth)
   return ensureUser(auth.id, auth.name, auth.username)
 }
 
@@ -203,12 +200,49 @@ export function registerRoutes(app: FastifyInstance) {
     }
   })
 
-  // Рулетка на сервере: все ставки раунда приходят одним запросом, ячейку выбирает сервер
-  app.post<{ Body: { red?: string; green?: string; black?: string } }>('/api/games/roulette', async (req, reply) => {
+  // Общая рулетка: ставка уходит сразу при нажатии и видна всем игрокам раунда
+  app.post<{ Body: { color?: string; amount?: string; key?: string } }>('/api/roulette/bet', async (req, reply) => {
     const user = requireUser(req, reply)
     if (!user) return
     try {
-      return playRoulette(user.id, { red: parseStake(req.body?.red), green: parseStake(req.body?.green), black: parseStake(req.body?.black) })
+      return placeRouletteBet(user, req.body?.color, parseAmount(req.body?.amount), req.body?.key)
+    } catch (e) {
+      return fail(reply, e)
+    }
+  })
+
+  app.get('/api/roulette/history', async () => rouletteHistory())
+
+  // ---------- Общий краш: ставка, отмена и вывод проходят только через сервер ----------
+
+  app.post<{ Body: { amount?: string; auto?: number | string | null; key?: string } }>('/api/crash/bet', async (req, reply) => {
+    const user = requireUser(req, reply)
+    if (!user) return
+    try {
+      return placeCrashBet(user, parseAmount(req.body?.amount), req.body?.auto, req.body?.key)
+    } catch (e) {
+      return fail(reply, e)
+    }
+  })
+
+  // Сыгранные раунды с раскрытыми сидами: для проверки на странице «Честная игра»
+  app.get('/api/crash/history', async () => crashHistory())
+
+  app.post('/api/crash/cancel', async (req, reply) => {
+    const user = requireUser(req, reply)
+    if (!user) return
+    try {
+      return cancelCrashBet(user)
+    } catch (e) {
+      return fail(reply, e)
+    }
+  })
+
+  app.post('/api/crash/cashout', async (req, reply) => {
+    const user = requireUser(req, reply)
+    if (!user) return
+    try {
+      return cashOutCrash(user)
     } catch (e) {
       return fail(reply, e)
     }
@@ -254,8 +288,14 @@ export function registerRoutes(app: FastifyInstance) {
     try {
       const slug = String(req.body?.slug ?? '')
       if (!SLUG_RE.test(slug)) throw new LedgerError('Неверный подарок')
-      const res = winGift(user.id, slug, String(req.body?.game ?? '').slice(0, 60) || 'gift')
-      return 'item' in res ? { item: giftOut(res.item) } : { credited: ton(res.credited), balance: ton(res.balance) }
+      const game = String(req.body?.game ?? '').slice(0, 60) || 'gift'
+      const res = winGift(user.id, slug, game)
+      if ('item' in res) {
+        const g = giftOut(res.item)
+        publishUserWin(user.id, { game, amount: g.price ?? '0', gift: { slug: String(g.slug), num: g.num, name: String(g.name) } })
+        return { item: g }
+      }
+      return { credited: ton(res.credited), balance: ton(res.balance) }
     } catch (e) {
       return fail(reply, e)
     }

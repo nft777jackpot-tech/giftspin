@@ -185,7 +185,7 @@ export function Coinflip() {
 
   return (
     <div className="screen">
-      <PageHead title={t('Коинфлип')} />
+      <PageHead title={t('Коинфлип')} room="coinflip" />
 
       <div className="panel">
         <div className="seg">

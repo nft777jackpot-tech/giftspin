@@ -8,11 +8,20 @@ export class ApiError extends Error {}
  * Адрес сервера. По умолчанию /api на том же адресе, что и сайт. Пустая строка — сервера нет,
  * например на GitHub Pages: сайт сразу работает в демо и не шлёт запросов в пустоту.
  */
-const API_URL: string = import.meta.env.VITE_API_URL ?? '/api'
+export const API_URL: string = import.meta.env.VITE_API_URL ?? '/api'
+
+/** Тестовый игрок вне Telegram (только testnet): номер можно сменить в localStorage, чтобы играть вдвоём. */
+export function devUser(): number {
+  try {
+    return Number(localStorage.getItem('giftspin:dev-user')) || 1
+  } catch {
+    return 1
+  }
+}
 
 function authHeaders(): Record<string, string> {
   if (tg?.initData) return { Authorization: `tma ${tg.initData}` }
-  return { 'x-dev-user': '1' }
+  return { 'x-dev-user': String(devUser()) }
 }
 
 export async function api<T>(path: string, init: { method?: 'GET' | 'POST'; body?: unknown } = {}): Promise<T> {

@@ -72,12 +72,15 @@ export interface UniqueGiftInfo {
 export interface TgMessage {
   message_id: number
   from?: TgUser
+  chat?: { id: number; type: 'private' | 'group' | 'supergroup' | 'channel' }
+  text?: string
   business_connection_id?: string
   unique_gift?: UniqueGiftInfo
 }
 
 export interface TgUpdate {
   update_id: number
+  message?: TgMessage
   business_connection?: BusinessConnection
   business_message?: TgMessage
 }

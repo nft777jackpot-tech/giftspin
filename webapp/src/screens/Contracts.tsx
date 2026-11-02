@@ -64,7 +64,7 @@ export function Contracts() {
 
   return (
     <div className="screen">
-      <PageHead title={t('Контракты')} />
+      <PageHead title={t('Контракты')} room="contracts" />
       <p className="screen-sub">{t('Сдайте от {min} до {max} подарков и получите один случайный', { min: CONTRACT_MIN, max: CONTRACT_MAX })}</p>
 
       <div className={`contract-core ${phase === 'fusing' ? 'is-fusing' : ''}`}>

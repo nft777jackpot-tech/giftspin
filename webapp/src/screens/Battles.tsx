@@ -114,7 +114,7 @@ export function Battles() {
 
   return (
     <div className="screen">
-      <PageHead title={t('Кейс-батлы')} />
+      <PageHead title={t('Кейс-батлы')} room="battles" />
       <p className="screen-sub">{t('Все открывают одинаковые кейсы. Кто выбил дороже, забирает подарки всех участников.')}</p>
 
       <div className="panel">

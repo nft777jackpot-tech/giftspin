@@ -1,3 +1,5 @@
+import CATALOG from './catalog.json'
+
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 
 export interface Gift {
@@ -13,65 +15,98 @@ export interface Gift {
   num?: number
 }
 
-// Демо-витрина без сервера. С сервером витрина — то, что лежит на складе (setCatalog).
+
+/**
+ * Красивые модели: номер экземпляра на Fragment, который показываем на витрине, в кейсах и в апгрейде.
+ * Выбраны вручную среди самых редких моделей коллекции.
+ */
+const SHOWCASE: Record<string, number> = {
+  luckylocket: 771, // Faberge Egg
+  diamondring: 30161, // Cobalt Rose
+  rarebird: 8951, // Frozen Gold
+  crystalball: 10218, // Femme Fatale
+  hangingstar: 1116, // Sparkles
+  evileye: 43613, // Jarvis
+  bunnymuffin: 37371, // Unicorn
+  jollychimp: 57649, // Golden Monkey
+  bowtie: 20461, // Farfalle
+  faithamulet: 34644, // Dark Night
+  springbasket: 65872, // Rabbit Habit
+  lightsword: 94064, // Wrath of Vader
+  snowglobe: 35908, // Party Cat
+  cloverpin: 97015, // Moon Power
+  moneypot: 24127, // Sauron
+  jackinthebox: 63112, // Sponge Box
+  swagbag: 7518, // Cookie Dude
+  libertyfigure: 189973, // Rebel Royal
+  partysparkler: 15759, // Premium
+  lolpop: 204653, // Andromeda
+  heroichelmet: 1033, // Equalizer
+  astralshard: 556, // Dark Soul
+  iongem: 1160, // Pink Floyd
+  magicpotion: 3311, // Star Power
+  nekohelmet: 861, // Sky Diver
+  bondedring: 2582, // Asteroid
+  genielamp: 3228, // Aladdin
+  electricskull: 4119, // Terminator
+  skystilettos: 18545, // Fortuna
+  ionicdryer: 15786, // Arc Reactor
+  surgeboard: 16780, // Duke
+  inputkey: 438, // Quad Damage
+  moonpendant: 51391, // Starry Night
+  stellarrocket: 102021, // To The Moon
+  miragelamp: 4443, // Warm Pixel
+  starnotepad: 1656, // Pepe Diary
+  tamagadget: 9978, // Classic Blue
+  chillflame: 241732, // Eye of Sauron
+  vicecream: 216527, // Gold Leaf
+  durovscap: 302, // Artwork
+  nailbracelet: 129, // Interstellar
+  minioscar: 374, // Grenadine
+  poolfloat: 171288, // Khokhloma
+  icecream: 301309, // Resistance
+  whipcupcake: 259257, // Starfish
+  moussecake: 149828, // Hollow Night
+  homemadecake: 74300, // Birthday
+  gingercookie: 48150, // Universe
+  candycane: 160509, // Mythic Candy
+  cookieheart: 454, // Lucky Charm
+  berrybox: 6492, // Lady Bites
+  jellybunny: 71199, // Sticky Red
+  happybrownie: 39335, // Kawaii
+  hypnolollipop: 55973, // Tamagotchi
+  plushpepe: 1515, // Cozy Galaxy
+  heartlocket: 1290, // Uranus
+  resistancedog: 7362, // Aura
+  preciouspeach: 1125, // Shocking
+  scaredcat: 2273, // Bubblegum
+  mightyarm: 1064, // Crystal Fist
+  lootbag: 13909, // Glacier
+  westsidesign: 4719, // Sapphire
+  kissedfrog: 2957, // Lilie Pond
+  swisswatch: 1251, // The Grid
+  trappedheart: 15409, // Comic Book
+}
+
+// Все коллекции подарков Telegram с минимальной ценой на Fragment (scripts/fragment-catalog.mjs).
+// Это демо-витрина без сервера; с сервером витрина — то, что лежит на складе (setCatalog).
 // id совпадает со slug коллекции на Fragment, по нему строится ссылка на картинку
-export const GIFTS: Gift[] = [
-  { id: 'plushpepe', name: 'Plush Pepe', price: 4200 },
-  { id: 'heartlocket', name: 'Heart Locket', price: 1350 },
-  { id: 'durovscap', name: "Durov's Cap", price: 520 },
-  { id: 'preciouspeach', name: 'Precious Peach', price: 260 },
-  { id: 'mightyarm', name: 'Mighty Arm', price: 140 },
-  { id: 'astralshard', name: 'Astral Shard', price: 85 },
-  { id: 'lootbag', name: 'Loot Bag', price: 58 },
-  { id: 'scaredcat', name: 'Scared Cat', price: 46 },
-  { id: 'magicpotion', name: 'Magic Potion', price: 42 },
-  { id: 'genielamp', name: 'Genie Lamp', price: 38 },
-  { id: 'lowrider', name: 'Low Rider', price: 34 },
-  { id: 'swisswatch', name: 'Swiss Watch', price: 29 },
-  { id: 'kissedfrog', name: 'Kissed Frog', price: 27 },
-  { id: 'signetring', name: 'Signet Ring', price: 24 },
-  { id: 'nekohelmet', name: 'Neko Helmet', price: 22 },
-  { id: 'vintagecigar', name: 'Vintage Cigar', price: 21 },
-  { id: 'ionicdryer', name: 'Ionic Dryer', price: 18 },
-  { id: 'toybear', name: 'Toy Bear', price: 17 },
-  { id: 'diamondring', name: 'Diamond Ring', price: 14 },
-  { id: 'eternalrose', name: 'Eternal Rose', price: 13 },
-  { id: 'lovepotion', name: 'Love Potion', price: 11 },
-  { id: 'tophat', name: 'Top Hat', price: 9.5 },
-  { id: 'trappedheart', name: 'Trapped Heart', price: 7.8 },
-  { id: 'crystalball', name: 'Crystal Ball', price: 7.2 },
-  { id: 'recordplayer', name: 'Record Player', price: 6.9 },
-  { id: 'sakuraflower', name: 'Sakura Flower', price: 5.6 },
-  { id: 'skullflower', name: 'Skull Flower', price: 5.1 },
-  { id: 'jellybunny', name: 'Jelly Bunny', price: 4.6 },
-  { id: 'witchhat', name: 'Witch Hat', price: 3.9 },
-  { id: 'evileye', name: 'Evil Eye', price: 3.7 },
-  { id: 'spyagaric', name: 'Spy Agaric', price: 3.5 },
-  { id: 'tamagadget', name: 'Tama Gadget', price: 3.3 },
-  { id: 'berrybox', name: 'Berry Box', price: 3.1 },
-  { id: 'hexpot', name: 'Hex Pot', price: 2.9 },
-  { id: 'snakebox', name: 'Snake Box', price: 2.8 },
-  { id: 'jesterhat', name: 'Jester Hat', price: 2.7 },
-  { id: 'gingercookie', name: 'Ginger Cookie', price: 2.6 },
-  { id: 'spicedwine', name: 'Spiced Wine', price: 2.5 },
-  { id: 'hypnolollipop', name: 'Hypno Lollipop', price: 2.4 },
-  { id: 'starnotepad', name: 'Star Notepad', price: 2.3 },
-  { id: 'petsnake', name: 'Pet Snake', price: 2.2 },
-  { id: 'partysparkler', name: 'Party Sparkler', price: 2.1 },
-  { id: 'homemadecake', name: 'Homemade Cake', price: 2.0 },
-  { id: 'bdaycandle', name: 'B-Day Candle', price: 1.9 },
-  { id: 'lolpop', name: 'Lol Pop', price: 1.8 },
-  { id: 'lunarsnake', name: 'Lunar Snake', price: 1.7 },
-  { id: 'deskcalendar', name: 'Desk Calendar', price: 1.6 },
-]
+export const GIFTS: Gift[] = (CATALOG as { id: string; name: string; price: number }[])
+  .filter((g) => g.price > 0)
+  .map((g) => ({ id: g.id, name: g.name, price: g.price, num: SHOWCASE[g.id] }))
 
 // Монеты TON из webapp/public/coins. В общий список подарков не входят: их нет в апгрейде, джекпоте и инвентаре.
 // Редкость своя, иначе по цене все монеты были бы обычными
 export const COINS: Gift[] = [
+  // «Ничего не выпало»: приз с нулевой ценой, рисуется красным крестом
+  { id: 'ton-0', name: '❌ Ничего', price: 0, coin: true, rarity: 'common' },
   { id: 'ton-0.01', name: '0.01 TON', price: 0.01, coin: true, rarity: 'common' },
   { id: 'ton-0.02', name: '0.02 TON', price: 0.02, coin: true, rarity: 'common' },
   { id: 'ton-0.05', name: '0.05 TON', price: 0.05, coin: true, rarity: 'uncommon' },
   { id: 'ton-0.1', name: '0.1 TON', price: 0.1, coin: true, rarity: 'uncommon' },
+  { id: 'ton-0.2', name: '0.2 TON', price: 0.2, coin: true, rarity: 'uncommon' },
+  { id: 'ton-0.3', name: '0.3 TON', price: 0.3, coin: true, rarity: 'rare' },
+  { id: 'ton-0.4', name: '0.4 TON', price: 0.4, coin: true, rarity: 'rare' },
   { id: 'ton-0.5', name: '0.5 TON', price: 0.5, coin: true, rarity: 'rare' },
   { id: 'ton-1', name: '1 TON', price: 1, coin: true, rarity: 'epic' },
   { id: 'ton-2', name: '2 TON', price: 2, coin: true, rarity: 'legendary' },

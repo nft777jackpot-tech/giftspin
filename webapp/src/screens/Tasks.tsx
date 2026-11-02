@@ -6,7 +6,7 @@ import { CHANNEL } from '../config'
 import { REF_FRIENDS, weekStart } from '../data/social'
 import { TASKS, type TaskAction, type TaskDef } from '../data/tasks'
 import { fmtAmount, fmtCountdown } from '../lib/format'
-import { t } from '../lib/i18n'
+import { t, tk } from '../lib/i18n'
 import { channelLink } from '../lib/links'
 import { haptic, openTg } from '../lib/telegram'
 import { useNav } from '../state/nav'
@@ -33,6 +33,8 @@ function doneNow(task: TaskDef, at: number | undefined, now: number): boolean {
   if (task.repeat === 'weekly') return at >= weekStart(now)
   return true
 }
+
+const LEVEL = { easy: tk('Легко'), medium: tk('Средне'), hard: tk('Сложно') }
 
 export function Tasks() {
   const { stats, tasksDone, completeTask, openSheet } = useStore()
@@ -90,7 +92,7 @@ export function Tasks() {
   return (
     <div className="screen">
       <PageHead title={t('Задания')} right={available > 0 ? <span className="badge badge--count">{available}</span> : undefined} />
-      <p className="screen-sub">{t('Награды приходят в TON, их можно сразу ставить в любых играх')}</p>
+      <p className="screen-sub">{t('Награды приходят в TON: чем сложнее задание, тем больше награда')}</p>
 
       <div className="task-list">
         {TASKS.map((task) => {
@@ -102,7 +104,9 @@ export function Tasks() {
             <div key={task.id} className={`task ${done ? 'is-done' : ''}`}>
               <span className="task__icon">{ICONS[task.action]}</span>
               <div className="task__main">
-                <b>{t(task.title)}</b>
+                <b>
+                  {t(task.title)} <span className={`task__level task__level--${task.level}`}>{t(LEVEL[task.level])}</span>
+                </b>
                 <span className="muted small">{task.action === 'subscribe' ? `${t(task.sub)} · ${CHANNEL}` : t(task.sub)}</span>
                 {task.goal !== undefined && task.goal > 1 && !done && (
                   <div className="task__bar">

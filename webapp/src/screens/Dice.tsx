@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { BetInput } from '../components/BetInput'
+import { NumInput } from '../components/NumInput'
 import { Money } from '../components/Money'
 import { PageHead } from '../components/PageHead'
 import { fmtMult, fmtNum } from '../lib/format'
@@ -95,7 +96,7 @@ export function Dice() {
 
   return (
     <div className="screen">
-      <PageHead title={t('Дайс')} />
+      <PageHead title={t('Дайс')} room="dice" />
 
       <div className="hist-row">
         {recent.map((r, i) => (
@@ -154,12 +155,7 @@ export function Dice() {
         <label className="dice-field">
           <span>{t('Шанс')}</span>
           <div>
-            <input
-              inputMode="decimal"
-              value={fmtNum(chance * 100, 2)}
-              onChange={(e) => setChancePct(parseFloat(e.target.value.replace(',', '.')))}
-              disabled={rolling}
-            />
+            <NumInput value={chance * 100} format={(n) => fmtNum(n, 2)} onValue={setChancePct} disabled={rolling} aria-label={t('Шанс')} />
             %
           </div>
         </label>

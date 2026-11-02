@@ -18,3 +18,7 @@ export function fairFloats(serverSeed: string, clientSeed: string, nonce: number
   }
   return out
 }
+
+/** Общие раунды (краш, рулетка, PvP): сид раунда + публичная соль, как на сайте. */
+export const ROUND_SALT = 'giftspin-public-salt'
+export const roundFloats = (seed: string, count: number) => fairFloats(seed, ROUND_SALT, 0, count)

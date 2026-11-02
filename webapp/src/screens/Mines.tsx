@@ -95,7 +95,7 @@ export function Mines() {
 
   return (
     <div className="screen">
-      <PageHead title={t('Мины')} />
+      <PageHead title={t('Мины')} room="mines" />
 
       <div className="mines-info">
         <div>

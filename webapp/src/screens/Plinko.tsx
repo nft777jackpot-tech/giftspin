@@ -115,7 +115,7 @@ export function Plinko() {
 
   return (
     <div className="screen">
-      <PageHead title={t('Плинко')} />
+      <PageHead title={t('Плинко')} room="plinko" />
 
       <div className="hist-row">
         {recent.map((m, i) => (

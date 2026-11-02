@@ -4,25 +4,16 @@ import { BetInput } from '../components/BetInput'
 import { TonIcon } from '../components/icons'
 import { Money } from '../components/Money'
 import { PageHead } from '../components/PageHead'
-import { type FakePlayer } from '../data/players'
+import { toast } from '../components/Toaster'
+import { api } from '../lib/api'
+import { demoSnap, flightMs, GROWTH, WAIT_MS, type CrashBetView, type CrashPhase, type CrashSnap } from '../lib/crashRounds'
 import { fmtAmount, fmtMult } from '../lib/format'
-import { crashPoint } from '../lib/rtp'
 import { t, tk } from '../lib/i18n'
+import { onLive, rejoinRoom, serverNow, useLive } from '../lib/live'
 import { haptic } from '../lib/telegram'
 import { useStore } from '../state/store'
 
-/** Скорость роста множителя: m(t) = e^(GROWTH·t), t в мс. x2 примерно за 8.7 с. */
-const GROWTH = 0.00008
-const WAIT_MS = 6000
-const AFTER_MS = 3200
-
-type Phase = 'waiting' | 'flying' | 'crashed'
-
-interface Bot extends FakePlayer {
-  bet: number
-  target: number
-  cashed?: number
-}
+type Phase = CrashPhase
 
 interface MyBet {
   amount: number
@@ -82,19 +73,6 @@ interface Particle {
   size: number
 }
 
-/** В режиме разработки можно задать точку следующего краша: window.__forceCrash = 120. */
-function nextCrashPoint(): number {
-  if (import.meta.env.DEV) {
-    const w = window as unknown as { __forceCrash?: number }
-    if (typeof w.__forceCrash === 'number') {
-      const v = w.__forceCrash
-      delete w.__forceCrash
-      return v
-    }
-  }
-  return crashPoint()
-}
-
 interface Star {
   x: number
   y: number
@@ -103,29 +81,62 @@ interface Star {
   phase: number
 }
 
-// Других игроков показываем только настоящих (их пришлёт сервер). Пока сервера нет — список пуст
-function makeBots(): Bot[] {
-  return []
-}
-
 function multTone(m: number) {
   if (m >= 10) return 'gold'
   if (m >= 2) return 'blue'
   return 'grey'
 }
 
+/** Ключ повторной отправки: если ответ на ставку потерялся, повтор с тем же ключом не спишет второй раз. */
+const newKey = () => `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
+
+const AVATAR_COLORS = ['#2ea7ff', '#7b5cff', '#ff5fa8', '#22d68a', '#ffc542', '#ff8a4d', '#4dd6e8']
+const colorOf = (uid: number) => AVATAR_COLORS[Math.abs(uid) % AVATAR_COLORS.length]
+
+const EMPTY_SNAP: CrashSnap = { id: 0, phase: 'waiting', startAt: 0, point: null, hash: '', seed: null, bets: [], history: [] }
+
+/** Снимок раунда с сервера: время сервера переводим в часы устройства. */
+function fromServer(msg: Record<string, unknown>): CrashSnap {
+  const shift = Date.now() - serverNow()
+  return {
+    id: Number(msg.id),
+    phase: msg.phase as Phase,
+    startAt: Number(msg.startAt) + shift,
+    point: msg.point === null ? null : Number(msg.point),
+    hash: String(msg.hash),
+    seed: (msg.seed as string | null) ?? null,
+    bets: (msg.bets as CrashBetView[]) ?? [],
+    history: (msg.history as CrashSnap['history']) ?? [],
+  }
+}
+
 export function Crash() {
-  const { spend, credit, openSheet } = useStore()
+  const { spend, credit, refund, openSheet, server, serverMove, refreshServer } = useStore()
+  const { me, connected } = useLive()
+  // С сервером раунды общие и настоящие, без него — общее демо-расписание
+  const shared = !!server
   const [phase, setPhase] = useState<Phase>('waiting')
-  const [history, setHistory] = useState<number[]>(() => Array.from({ length: 16 }, () => crashPoint()))
+  const [snap, setSnap] = useState<CrashSnap>(() => (shared ? EMPTY_SNAP : demoSnap()))
   const [bet, setBet] = useState(1)
   const [autoOn, setAutoOn] = useState(false)
   const [auto, setAuto] = useState('2.00')
-  const [myBet, setMyBet] = useState<MyBet | null>(null)
-  const [bots, setBots] = useState<Bot[]>(makeBots)
+  // Своя ставка в демо. С сервером своя ставка — запись в общем списке ставок раунда
+  const [localBet, setLocalBet] = useState<MyBet | null>(null)
+  const [pending, setPending] = useState(false)
+  const [placedRound, setPlacedRound] = useState(0)
   const [crashAt, setCrashAt] = useState(1)
   const [notice, setNotice] = useState<Notice | null>(null)
   const noticeTimer = useRef(0)
+  const betKey = useRef('')
+
+  const serverBet = shared ? snap.bets.find((b) => b.uid === me) : undefined
+  const myBet: MyBet | null = shared
+    ? serverBet
+      ? { amount: Number(serverBet.amount), cashed: serverBet.cashed ?? undefined }
+      : placedRound === snap.id
+        ? { amount: bet }
+        : null
+    : localBet
 
   const wrapRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -135,11 +146,13 @@ export function Crash() {
   const cashRef = useRef<HTMLSpanElement>(null)
   const milestoneRef = useRef<HTMLDivElement>(null)
 
-  // Цикл анимации живёт вне React: он читает свежие значения через refs
-  // Точка краша задаётся при запуске цикла, а не здесь: аргумент useRef вычисляется на каждой отрисовке
-  const round = useRef({ phase: 'waiting' as Phase, since: performance.now(), crash: 0, m: 1, crashT: 0 })
-  const live = useRef({ myBet, bots, autoOn, auto, credit })
-  live.current = { myBet, bots, autoOn, auto, credit }
+  // Цикл анимации живёт вне React: он читает свежие значения через refs.
+  // startPerf — момент взлёта по performance.now(), crash — точка взрыва (с сервера неизвестна до взрыва)
+  const round = useRef({ id: 0, phase: 'waiting' as Phase, startPerf: performance.now() + WAIT_MS, since: performance.now(), crash: Infinity, m: 1, crashT: 0 })
+  const live = useRef({ myBet, autoOn, auto, credit, shared })
+  live.current = { myBet, autoOn, auto, credit, shared }
+  /** Применить снимок раунда. Задаётся внутри цикла анимации: ему нужны его сцены. */
+  const applyRef = useRef<((s: CrashSnap) => void) | null>(null)
 
   const showNotice = (n: Omit<Notice, 'id'>) => {
     window.clearTimeout(noticeTimer.current)
@@ -148,22 +161,61 @@ export function Crash() {
   }
   useEffect(() => () => window.clearTimeout(noticeTimer.current), [])
 
+  // Снимки общего раунда с сервера: при входе в раздел и после каждого изменения
+  useEffect(() => {
+    if (!shared) return
+    setSnap(EMPTY_SNAP)
+    const off = onLive('crash', (msg) => {
+      const s = fromServer(msg)
+      setSnap(s)
+      applyRef.current?.(s)
+    })
+    // Снимок мог прийти до подписки (сервер нашёлся позже входа в раздел) — просим его заново
+    rejoinRoom()
+    return off
+  }, [shared])
+
+  // Автовывод с сервера: ставку вывел сервер, сообщаем игроку и обновляем баланс
+  const shownWin = useRef(0)
+  useEffect(() => {
+    if (!serverBet?.cashed || shownWin.current === snap.id) return
+    shownWin.current = snap.id
+    haptic.success()
+    showNotice({ win: true, mult: serverBet.cashed, amount: Number(serverBet.payout) })
+    refreshServer()
+  }, [serverBet?.cashed, snap.id])
+
   const cashOut = () => {
     const r = round.current
     const mb = live.current.myBet
     if (r.phase !== 'flying' || !mb || mb.cashed) return
+    if (live.current.shared) {
+      // Множитель вывода считает сервер по своим часам: у всех игроков он один
+      setPending(true)
+      api<{ cashed: number; payout: string; balance: string }>('/crash/cashout', { method: 'POST' })
+        .then((res) => {
+          serverMove(res.balance, 'win', `${t('Краш')} ${fmtMult(res.cashed)}`, Number(res.payout))
+          shownWin.current = round.current.id
+          haptic.success()
+          showNotice({ win: true, mult: res.cashed, amount: Number(res.payout) })
+        })
+        .catch((e) => {
+          haptic.error()
+          toast(String(e.message ?? e), 'error')
+        })
+        .finally(() => setPending(false))
+      return
+    }
     const m = r.m
     live.current.credit(mb.amount * m, `${t('Краш')} ${fmtMult(m)}`)
     const next = { ...mb, cashed: m }
     live.current.myBet = next
-    setMyBet(next)
+    setLocalBet(next)
     haptic.success()
     showNotice({ win: true, mult: m, amount: mb.amount * m })
   }
 
   useEffect(() => {
-    // В StrictMode эффект запускается дважды, точку берём только один раз
-    if (!round.current.crash) round.current.crash = nextCrashPoint()
     const canvas = canvasRef.current!
     const ctx = canvas.getContext('2d')!
     let w = 0
@@ -826,73 +878,95 @@ export function Crash() {
       }
     }
 
+    /** Взрыв на точке r.crash: у всех игроков на одном и том же множителе. */
+    const explode = (now: number) => {
+      const r = round.current
+      r.phase = 'crashed'
+      r.since = now
+      r.m = r.crash
+      r.crashT = flightMs(r.crash)
+      setPhase('crashed')
+      setCrashAt(r.crash)
+      const mb = live.current.myBet
+      if (mb && !mb.cashed) {
+        haptic.error()
+        showNotice({ win: false, mult: r.crash, amount: mb.amount })
+      }
+      if (multRef.current) multRef.current.textContent = fmtMult(r.crash)
+    }
+
+    // Снимок раунда (с сервера или из демо-расписания) задаёт номер, фазу, время взлёта и точку
+    applyRef.current = (s: CrashSnap) => {
+      const r = round.current
+      const now = performance.now()
+      if (s.id !== r.id) {
+        r.id = s.id
+        r.crash = Infinity
+        r.m = 1
+        resetLevels()
+        if (!live.current.shared) {
+          live.current.myBet = null
+          setLocalBet(null)
+        }
+        r.phase = 'waiting'
+        setPhase('waiting')
+      }
+      r.startPerf = now + (s.startAt - Date.now())
+      if (s.point !== null) r.crash = s.point
+      if (s.phase === 'crashed' && r.phase !== 'crashed') explode(now)
+      else if (s.phase === 'flying' && r.phase === 'waiting') {
+        r.phase = 'flying'
+        setPhase('flying')
+      }
+      setSnap(s)
+    }
+    // С сервером ждём его снимок, в демо раунд известен сразу
+    if (!live.current.shared) applyRef.current(demoSnap())
+
     let raf = 0
     let last = performance.now()
+    let lastDemo = 0
     const frame = (now: number) => {
       const r = round.current
       frameDt = Math.min(50, now - last)
       drift += frameDt * (r.phase === 'flying' ? 0.00003 * (1 + Math.log(r.m) * 1.5) : 0.000004)
       last = now
+      // Демо: раунд берём из общего расписания по часам устройства
+      if (!live.current.shared && now - lastDemo > 200) {
+        lastDemo = now
+        applyRef.current?.(demoSnap())
+      }
       if (r.phase === 'waiting') {
-        const left = Math.max(0, WAIT_MS - (now - r.since))
+        const left = Math.max(0, r.startPerf - now)
         if (timerRef.current) timerRef.current.textContent = `${(left / 1000).toFixed(1)} с`
-        if (barRef.current) barRef.current.style.transform = `scaleX(${left / WAIT_MS})`
+        if (barRef.current) barRef.current.style.transform = `scaleX(${Math.min(1, left / WAIT_MS)})`
         draw(0, 1, false, now)
         if (left <= 0) {
           r.phase = 'flying'
-          r.since = now
           r.m = 1
           setPhase('flying')
         }
       } else if (r.phase === 'flying') {
-        const t = now - r.since
+        const t = Math.max(0, now - r.startPerf)
         const m = Math.exp(GROWTH * t)
         if (m >= r.crash) {
-          r.phase = 'crashed'
-          r.since = now
-          r.m = r.crash
-          r.crashT = Math.log(r.crash) / GROWTH
-          setPhase('crashed')
-          setCrashAt(r.crash)
-          setHistory((hst) => [r.crash, ...hst].slice(0, 24))
-          const mb = live.current.myBet
-          if (mb && !mb.cashed) {
-            haptic.error()
-            showNotice({ win: false, mult: r.crash, amount: mb.amount })
-          }
+          explode(now)
           draw(r.crashT, r.crash, true, now)
-          if (multRef.current) multRef.current.textContent = fmtMult(r.crash)
         } else {
           r.m = m
           if (multRef.current) multRef.current.textContent = fmtMult(m)
           const mb = live.current.myBet
           if (mb && !mb.cashed) {
             if (cashRef.current) cashRef.current.textContent = fmtAmount(mb.amount * m)
+            // С сервером автовывод делает сам сервер, в демо — здесь
             const target = parseFloat(live.current.auto.replace(',', '.'))
-            if (live.current.autoOn && target > 1 && m >= target) cashOut()
-          }
-          const bs = live.current.bots
-          if (bs.some((b) => !b.cashed && m >= b.target)) {
-            const next = bs.map((b) => (!b.cashed && m >= b.target ? { ...b, cashed: b.target } : b))
-            live.current.bots = next
-            setBots(next)
+            if (!live.current.shared && live.current.autoOn && target > 1 && m >= target) cashOut()
           }
           draw(t, m, false, now)
         }
-      } else if (now - r.since <= AFTER_MS) {
-        draw(r.crashT, r.crash, true, now)
       } else {
-        r.phase = 'waiting'
-        r.since = now
-        r.crash = nextCrashPoint()
-        r.m = 1
-        resetLevels()
-        const nb = makeBots()
-        live.current.bots = nb
-        live.current.myBet = null
-        setBots(nb)
-        setMyBet(null)
-        setPhase('waiting')
+        // После взрыва ждём следующий раунд: его начало приходит снимком
+        draw(r.crashT, r.crash, true, now)
       }
       raf = requestAnimationFrame(frame)
     }
@@ -900,11 +974,39 @@ export function Crash() {
     return () => {
       cancelAnimationFrame(raf)
       ro.disconnect()
+      applyRef.current = null
     }
-  }, [])
+  }, [shared])
 
   const placeBet = () => {
-    if (phase !== 'waiting' || myBet) return
+    if (phase !== 'waiting' || myBet || pending) return
+    if (shared) {
+      // Ставку принимает только сервер. Ключ повторной отправки живёт до успешного ответа
+      const target = parseFloat(auto.replace(',', '.'))
+      betKey.current ||= newKey()
+      setPending(true)
+      haptic.tap()
+      const roundId = snap.id
+      api<{ id: number; amount: string; balance: string }>('/crash/bet', {
+        method: 'POST',
+        body: { amount: bet.toFixed(9), auto: autoOn && target > 1 ? target : null, key: betKey.current },
+      })
+        .then((res) => {
+          betKey.current = ''
+          setPlacedRound(res.id ?? roundId)
+          serverMove(res.balance, 'bet', 'Ставка в краше', -Number(res.amount))
+        })
+        .catch((e) => {
+          haptic.error()
+          const text = String(e.message ?? e)
+          if (text.includes('Недостаточно')) openSheet('deposit')
+          toast(text, 'error')
+          // Ставка точно не принята — следующий запрос будет новой ставкой
+          if (!text.includes('уже сделана')) betKey.current = ''
+        })
+        .finally(() => setPending(false))
+      return
+    }
     if (!spend(bet, 'Ставка в краше')) {
       haptic.error()
       openSheet('deposit')
@@ -913,33 +1015,46 @@ export function Crash() {
     haptic.tap()
     const mb = { amount: bet }
     live.current.myBet = mb
-    setMyBet(mb)
+    setLocalBet(mb)
   }
 
   const cancelBet = () => {
-    if (phase !== 'waiting' || !myBet) return
-    credit(myBet.amount, 'Отмена ставки')
+    if (phase !== 'waiting' || !myBet || pending) return
+    if (shared) {
+      setPending(true)
+      api<{ balance: string }>('/crash/cancel', { method: 'POST' })
+        .then((res) => {
+          setPlacedRound(0)
+          serverMove(res.balance, 'refund', 'Отмена ставки', myBet.amount)
+        })
+        .catch((e) => toast(String(e.message ?? e), 'error'))
+        .finally(() => setPending(false))
+      return
+    }
+    refund(myBet.amount, 'Отмена ставки')
     live.current.myBet = null
-    setMyBet(null)
+    setLocalBet(null)
   }
 
-  const pot = bots.reduce((s, b) => s + b.bet, 0) + (myBet?.amount ?? 0)
+  const players = shared ? snap.bets : myBet ? [{ uid: 0, name: t('Вы'), photo: null, amount: String(myBet.amount), auto: null, cashed: myBet.cashed ?? null, payout: '0' }] : []
+  const pot = players.reduce((sum, b) => sum + Number(b.amount), 0)
+  const reconnecting = shared && !connected
 
   let action
   if (phase === 'waiting') {
     action = myBet ? (
-      <button type="button" className="btn btn--ghost btn--lg btn--block" onClick={cancelBet}>
-        Ставка принята · отменить
+      <button type="button" className="btn btn--ghost btn--lg btn--block" onClick={cancelBet} disabled={pending}>
+        {t('Ставка принята · отменить')}
       </button>
     ) : (
-      <button type="button" className="btn btn--primary btn--lg btn--block" onClick={placeBet}>
-        Поставить <Money ton={bet} size={16} />
+      <button type="button" className="btn btn--primary btn--lg btn--block" onClick={placeBet} disabled={pending || reconnecting}>
+        {pending ? t('Отправляем ставку…') : <>{t('Поставить')} <Money ton={bet} size={16} /></>}
       </button>
     )
   } else if (phase === 'flying' && myBet && !myBet.cashed) {
     action = (
-      <button type="button" className="btn btn--success btn--lg btn--block" onClick={cashOut}>
-        Забрать
+      <button type="button" className="btn btn--success btn--lg btn--block" onClick={cashOut} disabled={pending}>
+        {t('Забрать')}
         <span className="money">
           <TonIcon size={16} />
           <span ref={cashRef}>{fmtAmount(myBet.amount)}</span>
@@ -949,25 +1064,25 @@ export function Crash() {
   } else if (myBet?.cashed) {
     action = (
       <button type="button" className="btn btn--ghost btn--lg btn--block" disabled>
-        Вы забрали {fmtMult(myBet.cashed)} · <Money ton={myBet.amount * myBet.cashed} size={16} />
+        {t('Вы забрали')} {fmtMult(myBet.cashed)} · <Money ton={myBet.amount * myBet.cashed} size={16} />
       </button>
     )
   } else {
     action = (
       <button type="button" className="btn btn--ghost btn--lg btn--block" disabled>
-        {phase === 'crashed' && myBet ? 'Ставка сгорела' : 'Ждём следующий раунд'}
+        {reconnecting ? t('Переподключаемся…') : phase === 'crashed' && myBet ? t('Ставка сгорела') : t('Ждём следующий раунд')}
       </button>
     )
   }
 
   return (
     <div className="screen">
-      <PageHead title="Краш" />
+      <PageHead title={t('Краш')} room="crash" />
 
       <div className="hist-row">
-        {history.map((m, i) => (
-          <span key={i} className={`hist-chip hist-chip--${multTone(m)}`}>
-            {fmtMult(m)}
+        {snap.history.map((r) => (
+          <span key={r.id} className={`hist-chip hist-chip--${multTone(r.point)}`}>
+            {fmtMult(r.point)}
           </span>
         ))}
       </div>
@@ -1010,12 +1125,13 @@ export function Crash() {
       <div className="panel">
         <BetInput value={bet} onChange={setBet} disabled={phase !== 'waiting' || !!myBet} />
         <div className="auto-row">
-          <button type="button" className={`toggle ${autoOn ? 'is-on' : ''}`} onClick={() => setAutoOn((v) => !v)} aria-pressed={autoOn}>
-            <span className="toggle__dot" /> Автовывод
+          {/* С сервером автовывод уходит вместе со ставкой, после ставки его не поменять */}
+          <button type="button" className={`toggle ${autoOn ? 'is-on' : ''}`} onClick={() => setAutoOn((v) => !v)} aria-pressed={autoOn} disabled={shared && !!myBet}>
+            <span className="toggle__dot" /> {t('Автовывод')}
           </button>
           <label className="auto-row__input">
             <span>x</span>
-            <input inputMode="decimal" value={auto} onChange={(e) => setAuto(e.target.value)} aria-label="Множитель автовывода" />
+            <input inputMode="decimal" value={auto} onChange={(e) => setAuto(e.target.value)} aria-label={t('Множитель автовывода')} disabled={shared && !!myBet} />
           </label>
         </div>
         {action}
@@ -1023,27 +1139,23 @@ export function Crash() {
 
       <div className="panel players">
         <div className="players__head">
-          <span>Игроки · {bots.length + (myBet ? 1 : 0)}</span>
+          <span>
+            {t('Игроки')} · {players.length}
+          </span>
           <Money ton={pot} size={13} />
         </div>
-        {myBet && (
-          <div className={`player-row is-me ${myBet.cashed ? 'is-won' : phase === 'crashed' ? 'is-lost' : ''}`}>
-            <Avatar name="Вы" color="#2ea7ff" size={28} />
-            <span className="player-row__name">Вы</span>
-            <Money ton={myBet.amount} size={12} />
-            <span className="player-row__result">
-              {myBet.cashed ? fmtMult(myBet.cashed) : phase === 'crashed' ? '—' : '…'}
-            </span>
-          </div>
-        )}
-        {bots.map((b) => (
-          <div key={b.id} className={`player-row ${b.cashed ? 'is-won' : phase === 'crashed' ? 'is-lost' : ''}`}>
-            <Avatar name={b.name} color={b.color} size={28} />
-            <span className="player-row__name">{b.name}</span>
-            <Money ton={b.bet} size={12} />
-            <span className="player-row__result">{b.cashed ? fmtMult(b.cashed) : phase === 'crashed' ? '—' : '…'}</span>
-          </div>
-        ))}
+        {players.length === 0 && <div className="players__empty muted small">{shared ? t('Пока никто не поставил в этом раунде') : t('Ставки других игроков видны, когда сервер онлайн')}</div>}
+        {players.map((b) => {
+          const mine = !shared || b.uid === me
+          return (
+            <div key={b.uid} className={`player-row ${mine ? 'is-me' : ''} ${b.cashed ? 'is-won' : phase === 'crashed' ? 'is-lost' : ''}`}>
+              <Avatar name={mine ? t('Вы') : b.name} color={mine ? '#2ea7ff' : colorOf(b.uid)} photo={b.photo ?? undefined} size={28} />
+              <span className="player-row__name">{mine ? t('Вы') : b.name}</span>
+              <Money ton={b.cashed ? Number(b.payout) || Number(b.amount) * b.cashed : Number(b.amount)} size={12} />
+              <span className="player-row__result">{b.cashed ? fmtMult(b.cashed) : phase === 'crashed' ? '—' : '…'}</span>
+            </div>
+          )
+        })}
       </div>
     </div>
   )

@@ -38,7 +38,7 @@ export function Inventory() {
   }
 
   return (
-    <div className="screen">
+    <div className="screen screen--wide">
       <h1 className="screen-title">Инвентарь</h1>
 
       <div className="inv-summary">

@@ -74,7 +74,6 @@ function remember(model: GiftModel) {
   }
 }
 
-export const cachedModels = (): GiftModel[] => [...cache().values()]
 export const cachedModel = (slug: string, num: number): GiftModel | undefined => cache().get(`${slug}-${num}`)
 
 /** Базовая картинка коллекции без фона: запасной вариант, если модель экземпляра не нарисовалась. */

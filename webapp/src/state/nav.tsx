@@ -18,7 +18,6 @@ export type Page =
   | { name: 'fair'; verify?: VerifyInput }
   | { name: 'history' }
   | { name: 'tasks' }
-  | { name: 'tournament' }
   | { name: 'referrals' }
   | { name: 'admin' }
 

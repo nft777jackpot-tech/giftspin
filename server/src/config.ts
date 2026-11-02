@@ -30,15 +30,20 @@ export const config = {
   },
   mnemonic: env.WALLET_MNEMONIC?.trim().split(/\s+/).filter(Boolean) ?? [],
   botToken: env.BOT_TOKEN?.trim() ?? '',
+  /** Адрес Mini App для кнопки «Играть» в приветствии бота. */
+  miniAppUrl: env.MINI_APP_URL?.trim() || 'https://nft777jackpot-tech.github.io/giftspin/',
+  channel: env.CHANNEL?.trim() || '@NFTJackpotAnnounce',
   devAuth: env.DEV_AUTH === '1' && IS_TESTNET,
   adminToken: env.ADMIN_TOKEN?.trim() ?? '',
   trustClientGames: env.TRUST_CLIENT_GAMES === '1' && IS_TESTNET,
   minDeposit: ton('MIN_DEPOSIT_TON', '0.1'),
-  minWithdraw: ton('MIN_WITHDRAW_TON', '0.5'),
+  minWithdraw: ton('MIN_WITHDRAW_TON', '5'),
   maxWithdraw: ton('MAX_WITHDRAW_TON', '50'),
   reviewOver: ton('REVIEW_OVER_TON', '10'),
   dailyWithdraw: ton('DAILY_WITHDRAW_TON', '100'),
   withdrawFee: ton('WITHDRAW_FEE_TON', '0.05'),
+  /** Наибольшая выплата за одну ставку: один удачный раунд не опустошит банк. */
+  maxWin: ton('MAX_WIN_TON', '500'),
   /** Остаток на горячем кошельке, который не тратим на выплаты: из него платится газ. */
   gasReserve: toNano('0.2'),
   depositPollMs: 10_000,

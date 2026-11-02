@@ -4,8 +4,8 @@ import { RTP } from '../config'
 
 /**
  * Шансы предметов кейса, при которых средний выигрыш равен rtp × price.
- * Вероятность падает экспоненциально с ценой предмета: p_i ∝ exp(-λ·v_i/target),
- * λ подбирается бисекцией.
+ * Вероятность падает степенно с ценой предмета: p_i ∝ v_i^(−α), α подбирается бисекцией.
+ * У дорогих подарков шанс маленький, но настоящий, а не исчезающе малый, как при экспоненте.
  */
 export function caseOdds(values: number[], price: number, rtp = RTP): number[] {
   const target = rtp * price
@@ -14,16 +14,19 @@ export function caseOdds(values: number[], price: number, rtp = RTP): number[] {
   if (target <= min || target >= max) {
     throw new Error(`Case EV ${target} is outside item range ${min}..${max}`)
   }
-  const xs = values.map((v) => v / target)
-  const probsFor = (lambda: number) => {
-    const logits = xs.map((x) => -lambda * x)
+  // Пустой приз (❌, цена 0) весит как половина самого дешёвого непустого
+  const floor = Math.min(...values.filter((v) => v > 0)) / 2
+  const logs = values.map((v) => Math.log(Math.max(v, floor)))
+  const probsFor = (alpha: number) => {
+    const logits = logs.map((l) => -alpha * l)
     const top = Math.max(...logits)
     const w = logits.map((l) => Math.exp(l - top))
     const sum = w.reduce((a, b) => a + b, 0)
     return w.map((x) => x / sum)
   }
-  const ev = (lambda: number) => probsFor(lambda).reduce((acc, p, i) => acc + p * values[i], 0)
+  const ev = (alpha: number) => probsFor(alpha).reduce((acc, p, i) => acc + p * values[i], 0)
 
+  // Чем больше alpha, тем сильнее перевес дешёвых призов и тем меньше среднее
   let lo = -1
   let hi = 1
   while (ev(lo) < target) lo *= 2

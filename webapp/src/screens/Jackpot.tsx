@@ -210,7 +210,7 @@ export function Jackpot() {
 
   return (
     <div className="screen">
-      <PageHead title="PvP-джекпот" right={<span className="muted small">Раунд #{roundNo}</span>} />
+      <PageHead title="PvP-джекпот" room="jackpot" right={<span className="muted small">Раунд #{roundNo}</span>} />
 
       <div className="jp-wheel">
         <div className="jp-wheel__pointer" />

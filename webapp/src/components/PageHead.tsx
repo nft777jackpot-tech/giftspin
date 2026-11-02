@@ -3,8 +3,10 @@ import { t } from '../lib/i18n'
 import { tg, useBackButton } from '../lib/telegram'
 import { useNav } from '../state/nav'
 import { IconBack } from './icons'
+import { OnlineDot } from './OnlineDot'
 
-export function PageHead({ title, right }: { title: string; right?: ReactNode }) {
+/** room — раздел игры: рядом с заголовком мигает онлайн этого режима. */
+export function PageHead({ title, right, room }: { title: string; right?: ReactNode; room?: string }) {
   const { back } = useNav()
   useBackButton(back)
   return (
@@ -16,6 +18,7 @@ export function PageHead({ title, right }: { title: string; right?: ReactNode })
         </button>
       )}
       <h1 className="page-head__title">{title}</h1>
+      {room && <OnlineDot room={room} here />}
       {right && <div className="page-head__right">{right}</div>}
     </div>
   )

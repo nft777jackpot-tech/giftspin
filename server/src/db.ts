@@ -114,6 +114,47 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   );
+
+  -- Общие раунды краша: хеш сида показывается до ставок, сам сид — после взрыва
+  CREATE TABLE IF NOT EXISTS crash_rounds (
+    id INTEGER PRIMARY KEY,
+    hash TEXT NOT NULL,
+    seed TEXT NOT NULL,
+    point REAL NOT NULL,
+    started_at INTEGER,
+    crashed_at INTEGER,
+    status TEXT NOT NULL DEFAULT 'open'
+  );
+
+  -- Общая рулетка: номер раунда — номер интервала по часам сервера
+  CREATE TABLE IF NOT EXISTS roulette_rounds (
+    id INTEGER PRIMARY KEY,
+    hash TEXT NOT NULL,
+    seed TEXT NOT NULL,
+    cell INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open'
+  );
+
+  CREATE TABLE IF NOT EXISTS roulette_bets (
+    round_id INTEGER NOT NULL REFERENCES roulette_rounds(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    color TEXT NOT NULL,
+    amount_nano INTEGER NOT NULL,
+    payout_nano INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (round_id, user_id, color)
+  );
+
+  CREATE TABLE IF NOT EXISTS crash_bets (
+    round_id INTEGER NOT NULL REFERENCES crash_rounds(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    amount_nano INTEGER NOT NULL,
+    auto REAL,
+    cashed REAL,
+    payout_nano INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (round_id, user_id)
+  );
 `)
 
 /** Запрос, который читает целые числа как bigint: суммы в нанотонах не теряют точность. */
@@ -125,15 +166,24 @@ export function q(sql: string) {
 
 export type Row = Record<string, SQLInputValue>
 
-/** Всё внутри выполняется целиком или не выполняется вовсе. */
+let depth = 0
+
+/**
+ * Всё внутри выполняется целиком или не выполняется вовсе. Вложенный вызов становится точкой сохранения
+ * внутри внешней транзакции: так, например, выигрыш подарка можно выдать прямо из игры.
+ */
 export function transaction<T>(fn: () => T): T {
-  db.exec('BEGIN IMMEDIATE')
+  const sp = depth > 0 ? `sp${depth}` : null
+  db.exec(sp ? `SAVEPOINT ${sp}` : 'BEGIN IMMEDIATE')
+  depth++
   try {
     const result = fn()
-    db.exec('COMMIT')
+    depth--
+    db.exec(sp ? `RELEASE ${sp}` : 'COMMIT')
     return result
   } catch (e) {
-    db.exec('ROLLBACK')
+    depth--
+    db.exec(sp ? `ROLLBACK TO ${sp}; RELEASE ${sp}` : 'ROLLBACK')
     throw e
   }
 }

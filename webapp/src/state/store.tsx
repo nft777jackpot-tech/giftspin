@@ -1,11 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from '../components/Toaster'
 import { RTP, REF_SHARE } from '../config'
-import { CASES, type CaseDef } from '../data/cases'
+import { buildCases, type CaseDef } from '../data/cases'
 import { findGift, getGift, GIFTS, isCoin, randomNum, registerGifts, setCatalog, type Gift } from '../data/gifts'
 import { PROMO_SEEDS, REF_FRIENDS, type Promo } from '../data/social'
 import { api, type CaseResult, type ServerGift, type ServerMe, type ServerPlay, type StockInfo } from '../lib/api'
 import { fairFloats, randomSeed, sha256Hex } from '../lib/fair'
+import type { FeedItem } from '../lib/live'
+import { loadCloud, loadLocal, saveCloud, saveLocal, type DemoSnapshot } from '../lib/persist'
+import { getMe } from '../lib/telegram'
 import { pickIndex } from '../lib/rtp'
 import type { GameId } from '../lib/verify'
 
@@ -19,7 +22,7 @@ export type SheetName = 'deposit' | 'withdraw' | 'promo' | 'lang' | 'bg' | null
 
 export interface Tx {
   id: string
-  kind: 'deposit' | 'withdraw' | 'bet' | 'win' | 'sell' | 'bonus' | 'ref'
+  kind: 'deposit' | 'withdraw' | 'bet' | 'win' | 'refund' | 'sell' | 'bonus' | 'ref'
   title: string
   /** Сумма в TON, со знаком. */
   amount: number
@@ -108,6 +111,12 @@ interface Store {
   /** Списывает ставку с баланса. Возвращает false, если не хватает. */
   spend(ton: number, title: string): boolean
   credit(ton: number, title: string): void
+  /** Возврат ставки (отмена): в историю как возврат, в ленту выигрышей не попадает. */
+  refund(ton: number, title: string): void
+  /** Свои выигрыши за сессию: лента без сервера, где других игроков нет. */
+  drops: FeedItem[]
+  /** Баланс из ответа сервера и запись в историю: для игр, где деньги двигает сам сервер. */
+  serverMove(balance: string, kind: Tx['kind'], title: string, amount: number): void
   /** Игры, которые считает сервер. Для них исход приходит с сервера, клиент его не задаёт. */
   serverGames: string[]
   /**
@@ -186,25 +195,32 @@ function newSeeds(clientSeed = randomSeed(8)): SeedPair {
 const REF_EARNED = REF_FRIENDS.reduce((s, f) => s + f.wagered * (1 - RTP) * REF_SHARE, 0)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [balanceTon, setBalance] = useState(25)
-  const [inventory, setInventory] = useState<InvItem[]>(START_INVENTORY)
-  const [history, setHistory] = useState<Tx[]>([])
+  // Демо-игра сохраняется на устройстве и в облаке Telegram: при перезаходе всё на месте
+  const [saved] = useState(loadLocal)
+  const [balanceTon, setBalance] = useState(saved?.balance ?? 25)
+  const [inventory, setInventory] = useState<InvItem[]>(saved?.inventory ?? START_INVENTORY)
+  const [history, setHistory] = useState<Tx[]>(saved?.history ?? [])
   const [sheet, openSheet] = useState<SheetName>(null)
-  const [stats, setStats] = useState<Stats>(EMPTY_STATS)
-  const [tasksDone, setTasksDone] = useState<Record<string, number>>({})
+  const [stats, setStats] = useState<Stats>(saved?.stats ?? EMPTY_STATS)
+  const [tasksDone, setTasksDone] = useState<Record<string, number>>(saved?.tasksDone ?? {})
   const [promos, setPromos] = useState<Promo[]>(PROMO_SEEDS)
-  const [promo, setPromo] = useState<string | null>(null)
-  const [refClaimed, setRefClaimed] = useState(0)
+  const [promo, setPromo] = useState<string | null>(saved?.promo ?? null)
+  const [refClaimed, setRefClaimed] = useState(saved?.refClaimed ?? 0)
   const [customCases, setCustomCases] = useState<CaseDef[]>([])
 
   // Пара сидов живёт в ref: roll вызывается из таймеров и должен сразу видеть новый nonce
-  const seedRef = useRef<SeedPair>(newSeeds())
-  const [seeds, setSeeds] = useState(() => ({ hash: seedRef.current.hash, clientSeed: seedRef.current.clientSeed, nonce: 0 }))
-  const [revealed, setRevealed] = useState<Record<string, string>>({})
-  const [rounds, setRounds] = useState<PlayRound[]>([])
+  const seedRef = useRef<SeedPair>(saved?.seeds ?? newSeeds())
+  const [seeds, setSeeds] = useState(() => ({ hash: seedRef.current.hash, clientSeed: seedRef.current.clientSeed, nonce: seedRef.current.nonce }))
+  const [revealed, setRevealed] = useState<Record<string, string>>(saved?.revealed ?? {})
+  const [rounds, setRounds] = useState<PlayRound[]>(saved?.rounds ?? [])
 
   const log = useCallback((kind: Tx['kind'], title: string, amount: number) => {
     setHistory((h) => [{ id: uid(), kind, title, amount, at: Date.now() }, ...h].slice(0, 200))
+  }, [])
+
+  const [drops, setDrops] = useState<FeedItem[]>(saved?.drops ?? [])
+  const pushDrop = useCallback((item: Pick<FeedItem, 'game' | 'amount' | 'gift' | 'prize'>) => {
+    setDrops((list) => [{ id: Date.now() + Math.random(), name: getMe().name || 'Вы', photo: getMe().photo ?? null, at: Date.now(), ...item }, ...list].slice(0, 30))
   }, [])
 
   const add = useCallback((delta: number) => setBalance((b) => b + delta), [])
@@ -302,8 +318,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       move(amountTon, title)
       log('win', title, amountTon)
       setStats((s) => ({ ...s, bestWin: Math.max(s.bestWin, amountTon) }))
+      if (amountTon > 0) pushDrop({ game: title, amount: amountTon.toFixed(2) })
+    },
+    [move, log, pushDrop],
+  )
+
+  const refund = useCallback(
+    (amountTon: number, title: string) => {
+      move(amountTon, title)
+      log('refund', title, amountTon)
     },
     [move, log],
+  )
+
+  const serverMove = useCallback(
+    (balance: string, kind: Tx['kind'], title: string, amount: number) => {
+      syncTon(balance)
+      log(kind, title, amount)
+      if (kind === 'bet') setStats((st) => ({ ...st, bets: st.bets + 1, betsToday: st.betsToday + 1, wagered: st.wagered - amount, wageredWeek: st.wageredWeek - amount }))
+      if (kind === 'win') setStats((st) => ({ ...st, bestWin: Math.max(st.bestWin, amount) }))
+      if (kind === 'refund') setStats((st) => ({ ...st, bets: st.bets - 1, betsToday: st.betsToday - 1, wagered: st.wagered - amount, wageredWeek: st.wageredWeek - amount }))
+    },
+    [syncTon, log],
   )
 
   const deposit = useCallback(
@@ -345,6 +381,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!serverRef.current) {
         const item = { uid: uid(), giftId, num }
         setInventory((inv) => [item, ...inv])
+        pushDrop({ game: 'gift', amount: String(getGift(giftId).price), gift: { slug: giftId, num, name: getGift(giftId).name } })
         return item
       }
       // С сервером выигрыш — конкретный подарок со склада. Номер экземпляра станет известен после ответа
@@ -371,7 +408,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         .finally(() => pendingWins.current.delete(temp.uid))
       return temp
     },
-    [syncTon],
+    [syncTon, pushDrop],
   )
 
   const removeItems = useCallback(
@@ -536,7 +573,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const coins = wins.filter((w) => isCoin(w.giftId)).reduce((sum, w) => sum + getGift(w.giftId).price, 0)
         if (coins > 0) credit(coins, label)
         wins.forEach((w) => round(w.r.nonce, w.r.clientSeed, w.r.hash, w.giftId))
-        return wins.map((w, i) => (isCoin(w.giftId) ? { uid: `coin-${Date.now()}-${i}`, giftId: w.giftId, num: 0 } : addItem(w.giftId, randomNum())))
+        // Выпадает та модель, что показана в кейсе
+        return wins.map((w, i) => (isCoin(w.giftId) ? { uid: `coin-${Date.now()}-${i}`, giftId: w.giftId, num: 0 } : addItem(w.giftId, getGift(w.giftId).num ?? randomNum())))
       }
       return { reel: wins.map((w) => w.giftId), reveal }
     },
@@ -580,10 +618,58 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return amount
   }, [refClaimed, move, log])
 
-  const cases = useMemo(() => [...CASES, ...customCases], [customCases])
+  // Шансы кейсов зависят от цен подарков: витрина со склада меняет цены — кейсы пересчитываются
+  const cases = useMemo(() => [...buildCases(), ...customCases], [catalog, customCases])
   casesRef.current = cases
   const addCase = useCallback((c: CaseDef) => setCustomCases((list) => [...list.filter((x) => x.id !== c.id), c]), [])
   const removeCase = useCallback((id: string) => setCustomCases((list) => list.filter((x) => x.id !== id)), [])
+
+  // Облачная копия свежее локальной (другое устройство или очищенный кэш) — берём её.
+  // Пока облако не прочитано, ничего не сохраняем, чтобы не затереть его начальным состоянием
+  const hydrated = useRef(false)
+  useEffect(() => {
+    loadCloud()
+      .then((cloud) => {
+        if (!cloud || (saved && saved.savedAt >= cloud.savedAt)) return
+        setBalance(cloud.balance)
+        setInventory(cloud.inventory)
+        setHistory(cloud.history)
+        setStats(cloud.stats)
+        setTasksDone(cloud.tasksDone)
+        setPromo(cloud.promo)
+        setRefClaimed(cloud.refClaimed)
+        seedRef.current = cloud.seeds
+        setSeeds({ hash: cloud.seeds.hash, clientSeed: cloud.seeds.clientSeed, nonce: cloud.seeds.nonce })
+        setRevealed(cloud.revealed)
+        setRounds(cloud.rounds)
+        setDrops(cloud.drops)
+      })
+      .finally(() => {
+        hydrated.current = true
+      })
+  }, [])
+
+  // С сервером баланс и подарки хранит сервер, сохраняем только демо
+  useEffect(() => {
+    if (!hydrated.current || server) return
+    const snap: DemoSnapshot = {
+      v: 1,
+      savedAt: Date.now(),
+      balance: balanceTon,
+      inventory,
+      history: history.slice(0, 80),
+      stats,
+      tasksDone,
+      promo,
+      refClaimed,
+      seeds: { ...seedRef.current },
+      revealed,
+      rounds: rounds.slice(0, 40),
+      drops: drops.slice(0, 20),
+    }
+    saveLocal(snap)
+    saveCloud(snap)
+  }, [server, balanceTon, inventory, history, stats, tasksDone, promo, refClaimed, seeds, revealed, rounds, drops])
 
   const value = useMemo<Store>(
     () => ({
@@ -599,6 +685,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       balanceTon,
       spend,
       credit,
+      refund,
+      drops,
+      serverMove,
       serverGames,
       playGame,
       openCase,
@@ -631,7 +720,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       removeCase,
     }),
     [
-      server, refreshServer, inventory, catalog, warehouse, giftRequests, history, sheet, balanceTon, spend, credit, deposit, withdraw,
+      server, refreshServer, inventory, catalog, warehouse, giftRequests, history, sheet, balanceTon, spend, credit, refund, drops, serverMove, deposit, withdraw,
       bonus, serverGames, playGame, openCase, addItem, removeItems, sellItems, withdrawGifts, seeds, revealed, roll, rotateSeeds, rounds, logRound, stats, noteShare, tasksDone,
       completeTask, promos, promo, activatePromo, addPromo, refClaimed, claimRef, cases, addCase, removeCase,
     ],

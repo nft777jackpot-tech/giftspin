@@ -165,7 +165,7 @@ function CaseOpen({ c }: { c: CaseDef }) {
 
   return (
     <div className="screen">
-      <PageHead title={caseName(c)} />
+      <PageHead title={caseName(c)} room="cases" />
 
       {count === 1 && (
         <div className="case-hero" style={{ '--accent': c.accent } as CSSProperties}>

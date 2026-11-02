@@ -16,7 +16,7 @@ type Tab = 'ton' | 'gifts'
 
 // Комиссия и минимум вывода в демо, без сервера
 const NETWORK_FEE = 0.05
-const MIN_WITHDRAW = 1
+const MIN_WITHDRAW = 5
 
 const GIFT_STATUS: Record<'withdrawing' | 'transferring' | 'sent', string> = {
   withdrawing: tk('На проверке'),
@@ -145,7 +145,7 @@ export function WithdrawSheet() {
                   max: fmtAmount(Number(limits.maxWithdraw)),
                   review: fmtAmount(Number(limits.reviewOver)),
                 })
-              : t('Минимум {min} TON. Крупные выводы проверяются вручную, обычно до часа.', { min: MIN_WITHDRAW })}
+              : t('Минимум {min} TON. Крупные выводы проверяются вручную, обычно до часа.', { min })}
           </p>
 
           {live && list.length > 0 && (

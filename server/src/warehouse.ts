@@ -10,7 +10,6 @@ import { botApi, type BusinessConnection, type OwnedGift, type OwnedGifts, type 
 
 const CONNECTION = 'warehouse.connection'
 const ACCOUNT = 'warehouse.account'
-const UPDATES_OFFSET = 'telegram.offset'
 const MISSING = 'Подарка нет на складе'
 
 /** Подарок со склада в нашем виде. slug — коллекция, как в ссылках Fragment: plushpepe. */
@@ -213,20 +212,6 @@ function creditDeposit(id: string, log: FastifyBaseLogger) {
 }
 
 /** Забирает обновления бота long polling'ом: сайт не обязан быть доступен из интернета. */
-export async function pollUpdates(log: FastifyBaseLogger) {
-  if (config.warehouse !== 'telegram') return
-  const offset = Number(kv.get(UPDATES_OFFSET) ?? 0)
-  const updates = await botApi<TgUpdate[]>('getUpdates', { offset, timeout: 25, allowed_updates: ['business_connection', 'business_message'] }, 35_000)
-  for (const u of updates) {
-    try {
-      await handleUpdate(u, log)
-    } catch (e) {
-      log.error({ err: String(e), update: u.update_id }, 'не удалось обработать обновление бота')
-    }
-    kv.set(UPDATES_OFFSET, String(u.update_id + 1))
-  }
-}
-
 // ---------- Витрина и инвентарь ----------
 
 /** Подарок можно выиграть: свободен и Telegram разрешает передать его сейчас. */

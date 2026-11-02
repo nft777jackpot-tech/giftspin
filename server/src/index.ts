@@ -4,8 +4,12 @@ import { config, NETWORK } from './config.ts'
 import './db.ts'
 import { pollDeposits } from './deposits.ts'
 import { registerRoutes } from './routes.ts'
+import { startCrash } from './crash.ts'
+import { startRoulette } from './roulette.ts'
+import { registerLive } from './live.ts'
 import { friendly, hotAddress, hotBalance, initWallet } from './ton.ts'
-import { pollUpdates, recoverGiftTransfers, syncStock } from './warehouse.ts'
+import { recoverGiftTransfers, syncStock } from './warehouse.ts'
+import { pollBot, setupBot } from './bot.ts'
 import { processNextWithdrawal, recoverInterrupted } from './withdrawals.ts'
 
 const app = Fastify({ logger: { level: 'info' }, bodyLimit: 16 * 1024 })
@@ -13,7 +17,10 @@ const app = Fastify({ logger: { level: 'info' }, bodyLimit: 16 * 1024 })
 await initWallet()
 recoverInterrupted()
 recoverGiftTransfers()
+await registerLive(app)
 registerRoutes(app)
+startCrash()
+startRoulette()
 await app.listen({ port: config.port, host: config.host })
 
 app.log.info(`Сеть: ${NETWORK}. Кошелёк проекта: ${friendly(hotAddress())}. Склад подарков: ${config.warehouse}`)
@@ -37,5 +44,8 @@ function loop(name: string, everyMs: number, task: () => Promise<void>) {
 loop('депозиты', config.depositPollMs, () => pollDeposits(app.log))
 loop('выводы', config.withdrawPollMs, () => processNextWithdrawal(app.log))
 if (config.warehouse !== 'off') loop('склад', config.stockSyncMs, () => syncStock(app.log))
-// getUpdates сам ждёт до 25 секунд, поэтому пауза между запросами короткая
-if (config.warehouse === 'telegram') loop('бот', 1000, () => pollUpdates(app.log))
+// Бот: приветствие на /start и сообщения склада. getUpdates сам ждёт до 25 секунд, поэтому пауза короткая
+if (config.botToken) {
+  setupBot(app.log)
+  loop('бот', 1000, () => pollBot(app.log))
+}

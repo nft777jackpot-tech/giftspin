@@ -6,6 +6,7 @@ import { Toaster } from './components/Toaster'
 import Velaris from './components/ui/velaris'
 import { BgContext, bgBase, bgColors, loadBg, saveBg, type BgState } from './lib/background'
 import { detectLang, LangContext, saveLang, setCurrentLang, type Lang } from './lib/i18n'
+import { startLive, useLiveRoom } from './lib/live'
 import { setTgChrome } from './lib/telegram'
 import { Battle } from './screens/Battle'
 import { Battles } from './screens/Battles'
@@ -26,7 +27,6 @@ import { Profile } from './screens/Profile'
 import { Referrals } from './screens/Referrals'
 import { Roulette } from './screens/Roulette'
 import { Tasks } from './screens/Tasks'
-import { Tournament } from './screens/Tournament'
 import { Upgrade } from './screens/Upgrade'
 import { BackgroundSheet } from './sheets/BackgroundSheet'
 import { DepositSheet } from './sheets/DepositSheet'
@@ -69,8 +69,6 @@ function Screen() {
         return <History />
       case 'tasks':
         return <Tasks />
-      case 'tournament':
-        return <Tournament />
       case 'referrals':
         return <Referrals />
     }
@@ -96,6 +94,18 @@ function ScrollTop() {
   }, [tab, page])
   return null
 }
+
+/** Раздел для онлайна на сервере: страница игры или вкладка. Кейс и батл считаются в своих разделах. */
+const ROOM_OF: Record<string, string> = { case: 'cases', battle: 'battles' }
+
+function LiveRoom() {
+  const { tab, page } = useNav()
+  const name = page?.name ?? tab
+  useLiveRoom(ROOM_OF[name] ?? name)
+  return null
+}
+
+startLive()
 
 export function App() {
   const [lang, setLangState] = useState<Lang>(detectLang)
@@ -138,6 +148,7 @@ export function App() {
           <BattlesProvider>
             <NavProvider>
               <ScrollTop />
+              <LiveRoom />
               {/* Фон прибит к экрану: так он не растягивается на длинных страницах и не ломает липкую шапку */}
               <Velaris className="fixed inset-0 -z-10" height="100%" bg={bgBase(bg.tone)} colors={bgColors(bg)} speed={1.2} grain={0.25} maxDpr={1} />
               {bg.floating && <FloatingGifts />}

@@ -1,13 +1,15 @@
 // Игры на сервере: сервер сам принимает ставку, считает исход честной схемой и меняет баланс.
 // Клиент только показывает результат и не может его подделать. Сейчас так работает дайс — образец для остальных.
 import { fromNano, toNano } from '@ton/core'
+import { config } from './config.ts'
 import { q, transaction, type Row } from './db.ts'
 import { fairFloats, randomSeed, sha256Hex } from './fair.ts'
-import { caseOdds, DICE_MAX_CHANCE, DICE_MIN_CHANCE, diceMultiplier, diceRoll, diceWin, pickIndex, PLINKO_ROWS, plinkoMultipliers, plinkoPath, ROULETTE_CELLS, rouletteCell, rouletteMultiplier, type PlinkoRisk, type PlinkoRows, type RouletteColor } from './gamemath.ts'
+import { caseOdds, DICE_MAX_CHANCE, DICE_MIN_CHANCE, diceMultiplier, diceRoll, diceWin, pickIndex, PLINKO_ROWS, plinkoMultipliers, plinkoPath, type PlinkoRisk, type PlinkoRows } from './gamemath.ts'
 import { applyLedger, LedgerError } from './ledger.ts'
+import { publishUserWin } from './live.ts'
 
-/** Игры, которые считает сервер. Остальные пока на клиенте (только testnet), см. TRUST_CLIENT_GAMES. */
-export const SERVER_GAMES = ['dice', 'plinko', 'case', 'roulette'] as const
+/** Игры, которые считает сервер (краш и рулетка — общими раундами). Остальные пока на клиенте (только testnet), см. TRUST_CLIENT_GAMES. */
+export const SERVER_GAMES = ['dice', 'plinko', 'case', 'roulette', 'crash'] as const
 
 const MAX_BET = toNano('1000')
 const REVEALED_KEEP = 20
@@ -101,8 +103,12 @@ function resolve(userId: number, kind: string, betNano: bigint, floatCount: numb
     q('UPDATE game_seeds SET nonce = nonce + 1 WHERE user_id = ?').run(userId)
 
     let balance = q('SELECT balance_nano FROM users WHERE id = ?').get(userId)!.balance_nano as bigint
-    const payout = c.payout ?? (c.multiplier > 0 ? (betNano * BigInt(Math.round(c.multiplier * 10000))) / 10000n : 0n)
+    let payout = c.payout ?? (c.multiplier > 0 ? (betNano * BigInt(Math.round(c.multiplier * 10000))) / 10000n : 0n)
+    // Потолок выплаты за ставку: один удачный исход не опустошит банк
+    if (payout > config.maxWin) payout = config.maxWin
     if (payout > 0n) balance = applyLedger(userId, 'win', payout, `${kind}:${nonce}`)
+    // В общую ленту попадают выигрыши больше ставки
+    if (payout > betNano) publishUserWin(userId, { game: kind, amount: fromNano(payout) })
     return {
       multiplier: c.multiplier,
       payout: fromNano(payout),
@@ -139,26 +145,12 @@ export function playPlinko(userId: number, betNano: bigint, rows: PlinkoRows, ri
   })
 }
 
-/**
- * Рулетка: ставки на несколько цветов сразу, одна ячейка из сида. Выигрывает ставка на выпавший цвет
- * по его множителю, остальные сгорают. Список ставок приходит одним запросом в момент запуска.
- */
-export function playRoulette(userId: number, bets: Record<RouletteColor, bigint>): PlayResult {
-  const total = bets.red + bets.green + bets.black
-  return resolve(userId, 'roulette', total, 1, ([u]) => {
-    const cell = rouletteCell(u)
-    const color = ROULETTE_CELLS[cell]
-    const payout = (bets[color] * BigInt(Math.round(rouletteMultiplier(color) * 100))) / 100n
-    const multiplier = total > 0n ? Number((payout * 10000n) / total) / 10000 : 0
-    return { multiplier, payout, result: color, win: payout > 0n, extra: { cell, color } }
-  })
-}
-
 // ---------- Кейсы ----------
 // Пока только кейсы с монетами (как «Бомж»). Порядок призов = порядок шансов, как на сайте.
 // Кейсы с подарками подключим вместе с апгрейдом и контрактами (списание/выдача со склада).
 const CASE_CATALOG: Record<string, { price: string; items: string[] }> = {
-  bomzh: { price: '0.1', items: ['ton-0.01', 'ton-0.02', 'ton-0.05', 'ton-0.1', 'ton-0.5', 'ton-1', 'ton-2'] },
+  // ton-0 — «ничего не выпало»: приз с нулевой ценой
+  bomzh: { price: '0.1', items: ['ton-0', 'ton-0.01', 'ton-0.02', 'ton-0.05', 'ton-0.1', 'ton-0.5', 'ton-1', 'ton-2'] },
 }
 const isCoin = (id: string) => id.startsWith('ton-')
 const coinValue = (id: string) => Number(id.slice(4))
@@ -198,7 +190,10 @@ export function openCase(userId: number, caseId: string, count: number): CaseRes
       const [u] = fairFloats(serverSeed, clientSeed, nonce, 1)
       const id = def.items[pickIndex(chances, u)]
       q('UPDATE game_seeds SET nonce = nonce + 1 WHERE user_id = ?').run(userId)
-      balance = applyLedger(userId, 'win', toNano(String(coinValue(id))), `case:${nonce}`)
+      if (coinValue(id) > 0) {
+        balance = applyLedger(userId, 'win', toNano(String(coinValue(id))), `case:${nonce}`)
+        publishUserWin(userId, { game: 'case', amount: String(coinValue(id)), prize: id })
+      }
       prizes.push({ id, value: String(coinValue(id)), nonce })
     }
     return { prizes, balance: fromNano(balance), hash, clientSeed }

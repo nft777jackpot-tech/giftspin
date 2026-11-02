@@ -34,7 +34,7 @@ export interface BgState {
 export type BgTone = 'dark' | 'light'
 
 const STORAGE_KEY = 'bg'
-const DEFAULT: BgState = { id: 'ocean', custom: BG_THEMES[0].colors.slice(0, 3), floating: false, tone: 'dark' }
+const DEFAULT: BgState = { id: 'ocean', custom: BG_THEMES[0].colors.slice(0, 3), floating: true, tone: 'dark' }
 const isHex = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)
 
 export function loadBg(): BgState {

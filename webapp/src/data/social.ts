@@ -43,15 +43,3 @@ export function weekStart(at = Date.now()): number {
   const day = (d.getUTCDay() + 6) % 7
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - day)
 }
-
-export interface Leader {
-  name: string
-  color: string
-  /** Очки — оборот за неделю в TON. */
-  points: number
-}
-
-/** Таблица недели. Пока нет сервера с реальными игроками — пустая, без выдуманных. */
-export function weeklyLeaders(): Leader[] {
-  return []
-}

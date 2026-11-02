@@ -1,11 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { caseName } from '../components/CaseCard'
 import { IconCopy } from '../components/icons'
 import { PageHead } from '../components/PageHead'
 import { toast } from '../components/Toaster'
 import { RTP } from '../config'
 import { actualRtp, GAME_STATS } from '../data/stats'
-import { CHAIN_TERMINAL, crashHistory } from '../lib/crashChain'
+import { api } from '../lib/api'
+import { demoSnap, type PastRound } from '../lib/crashRounds'
 import { fmtChance, fmtMult, fmtNum, fmtTime, shortHash } from '../lib/format'
 import { t, tk } from '../lib/i18n'
 import { rouletteMultiplier, UPGRADE_MAX_CHANCE } from '../lib/rtp'
@@ -47,8 +48,15 @@ const FORMULA: Record<GameId, string> = {
 }
 
 export function Fair({ preset }: { preset?: VerifyInput }) {
-  const { seeds, revealed, rotateSeeds, rounds, cases } = useStore()
+  const { seeds, revealed, rotateSeeds, rounds, cases, server } = useStore()
   const [tab, setTab] = useState<Tab>(preset ? 'verify' : 'seeds')
+  // Сыгранные раунды краша: с сервера — общие настоящие, без него — из демо-расписания
+  const [crashRounds, setCrashRounds] = useState<PastRound[]>(() => demoSnap().history)
+  useEffect(() => {
+    if (tab !== 'crash') return
+    if (!server) setCrashRounds(demoSnap().history)
+    else api<PastRound[]>('/crash/history').then(setCrashRounds).catch(() => {})
+  }, [tab, !!server])
   const [clientSeed, setClientSeed] = useState(seeds.clientSeed)
   const [input, setInput] = useState<VerifyInput>(preset ?? { game: 'dice' })
   const rtp = Math.round(RTP * 100)
@@ -309,22 +317,16 @@ export function Fair({ preset }: { preset?: VerifyInput }) {
       {tab === 'crash' && (
         <>
           <div className="panel fair">
-            <p>{t('Сид каждого раунда — SHA-256 сида следующего раунда. Цепочка создана заранее, её последнее звено опубликовано до первой игры, поэтому будущие раунды подменить нельзя.')}</p>
-            <label className="field">
-              <span>{t('Опубликованный конец цепочки')}</span>
-              <Copyable text={CHAIN_TERMINAL} />
-            </label>
+            <p>{t('Раунд краша один на всех игроков. Хеш его сида виден до приёма ставок, сам сид раскрывается сразу после взрыва: по нему любой пересчитает точку взрыва и убедится, что её не подменили.')}</p>
           </div>
           <div className="panel tx-list">
-            {crashHistory().slice(0, 50).map((r) => (
+            {crashRounds.map((r) => (
               <div key={r.id} className="tx">
                 <div>
                   <div className="tx__title">
                     #{r.id} <span className={`hist-chip hist-chip--${r.point >= 10 ? 'gold' : r.point >= 2 ? 'blue' : 'grey'}`}>{fmtMult(r.point)}</span>
                   </div>
-                  <div className="muted small mono">
-                    {shortHash(r.seed)} · {fmtTime(r.at)}
-                  </div>
+                  <div className="muted small mono">{shortHash(r.seed)}</div>
                 </div>
                 <button type="button" className="btn btn--ghost btn--sm" onClick={() => verifyFrom({ game: 'crash', seed: r.seed })}>
                   {t('Проверить')}

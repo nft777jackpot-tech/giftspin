@@ -14,6 +14,6 @@ export default defineConfig({
     host: true,
     port: 5173,
     // Запросы к серверу с кошельком проекта идут через тот же адрес, что и сайт
-    proxy: { '/api': 'http://127.0.0.1:8787' },
+    proxy: { '/api': { target: 'http://127.0.0.1:8787', ws: true } },
   },
 })
