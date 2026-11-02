@@ -7,7 +7,7 @@ import { config } from './config.ts'
 import { q, transaction } from './db.ts'
 import { randomSeed, roundFloats, sha256Hex } from './fair.ts'
 import { CRASH_GROWTH, crashMultiplierAt, crashPoint, crashTimeOf } from './gamemath.ts'
-import { applyLedger, LedgerError, type User } from './ledger.ts'
+import { applyLedger, LedgerError, restoreWager, wagerLeft, type User } from './ledger.ts'
 import { broadcast, onJoin, photoOf, publishWin } from './live.ts'
 
 const WAIT_MS = 7000
@@ -32,6 +32,8 @@ interface Bet {
   payout: bigint
   key: string | null
   at: number
+  /** Сколько эта ставка закрыла в отыгрыше: при отмене это возвращается. */
+  wager: bigint
 }
 
 interface Round {
@@ -184,12 +186,15 @@ export function placeCrashBet(user: User, amount: bigint, autoRaw: unknown, keyR
   if (amount < MIN_BET) throw new LedgerError('Минимальная ставка 0.1 TON')
   if (amount > MAX_BET) throw new LedgerError('Слишком большая ставка')
   const auto = parseAuto(autoRaw)
+  let wager = 0n
   const balance = transaction(() => {
+    const before = wagerLeft(user.id)
     const b = applyLedger(user.id, 'bet', -amount, `crash:${round.id}`)
-    q('INSERT INTO crash_bets (round_id, user_id, amount_nano, auto, created_at) VALUES (?, ?, ?, ?, ?)').run(round.id, user.id, amount, auto, Date.now())
+    wager = before - wagerLeft(user.id)
+    q('INSERT INTO crash_bets (round_id, user_id, amount_nano, auto, wager_nano, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(round.id, user.id, amount, auto, wager, Date.now())
     return b
   })
-  round.bets.set(user.id, { userId: user.id, name: user.name, amount, auto, cashed: null, payout: 0n, key, at: Date.now() })
+  round.bets.set(user.id, { userId: user.id, name: user.name, amount, auto, cashed: null, payout: 0n, key, at: Date.now(), wager })
   push()
   return { id: round.id, amount: fromNano(amount), balance: fromNano(balance) }
 }
@@ -200,6 +205,7 @@ export function cancelCrashBet(user: User) {
   if (round.phase !== 'waiting' || Date.now() > round.startAt - BET_CLOSE_MS) throw new LedgerError('Раунд уже начался')
   const balance = transaction(() => {
     q('DELETE FROM crash_bets WHERE round_id = ? AND user_id = ?').run(round.id, user.id)
+    restoreWager(user.id, bet.wager)
     return applyLedger(user.id, 'refund', bet.amount, `crash:${round.id}:cancel`)
   })
   round.bets.delete(user.id)
@@ -230,8 +236,11 @@ function recover() {
   const open = q("SELECT id FROM crash_rounds WHERE status = 'open'").all()
   for (const r of open) {
     transaction(() => {
-      const bets = q('SELECT user_id, amount_nano FROM crash_bets WHERE round_id = ? AND cashed IS NULL').all(r.id)
-      for (const b of bets) applyLedger(Number(b.user_id), 'refund', b.amount_nano as bigint, `crash:${r.id}:void`)
+      const bets = q('SELECT user_id, amount_nano, wager_nano FROM crash_bets WHERE round_id = ? AND cashed IS NULL').all(r.id)
+      for (const b of bets) {
+        applyLedger(Number(b.user_id), 'refund', b.amount_nano as bigint, `crash:${r.id}:void`)
+        restoreWager(Number(b.user_id), b.wager_nano as bigint)
+      }
       q("UPDATE crash_rounds SET status = 'void' WHERE id = ?").run(r.id)
     })
   }

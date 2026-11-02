@@ -157,6 +157,17 @@ db.exec(`
   );
 `)
 
+/** Новый столбец в уже созданной таблице. Старая база обновляется при запуске. */
+function addColumn(table: string, column: string, definition: string) {
+  const columns = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+  if (!columns.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+}
+
+// Отыгрыш: сколько игроку ещё нужно поставить до вывода и сколько из него закрыла каждая отменяемая ставка
+addColumn('users', 'wager_left_nano', 'INTEGER NOT NULL DEFAULT 0')
+addColumn('crash_bets', 'wager_nano', 'INTEGER NOT NULL DEFAULT 0')
+addColumn('roulette_bets', 'wager_nano', 'INTEGER NOT NULL DEFAULT 0')
+
 /** Запрос, который читает целые числа как bigint: суммы в нанотонах не теряют точность. */
 export function q(sql: string) {
   const stmt = db.prepare(sql)

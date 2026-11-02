@@ -1,5 +1,7 @@
 // Игроки и их баланс. Любое изменение баланса проходит через applyLedger и оставляет запись в журнале
 import { randomBytes } from 'node:crypto'
+import { fromNano } from '@ton/core'
+import { config } from './config.ts'
 import { q, transaction } from './db.ts'
 
 export interface User {
@@ -9,9 +11,14 @@ export interface User {
   /** Код в комментарии к переводу: по нему депозит находит игрока. */
   memo: string
   balance: bigint
+  /** Отыгрыш: сколько ещё нужно поставить, прежде чем откроется вывод. */
+  wagerLeft: bigint
 }
 
-export type LedgerKind = 'deposit' | 'withdraw' | 'withdraw_refund' | 'bet' | 'win' | 'refund' | 'gift_deposit' | 'gift_sell'
+export type LedgerKind = 'deposit' | 'withdraw' | 'withdraw_refund' | 'bet' | 'win' | 'refund' | 'bonus' | 'gift_deposit' | 'gift_sell'
+
+/** Эти зачисления нужно отыграть перед выводом: пополнения TON и подарком, награды за задания и промокоды. */
+const MUST_WAGER: LedgerKind[] = ['deposit', 'gift_deposit', 'bonus']
 
 export class LedgerError extends Error {}
 
@@ -31,6 +38,7 @@ function toUser(row: Record<string, unknown> | undefined): User | null {
     username: (row.username as string | null) ?? null,
     memo: String(row.memo),
     balance: row.balance_nano as bigint,
+    wagerLeft: row.wager_left_nano as bigint,
   }
 }
 
@@ -71,8 +79,27 @@ export function applyLedger(userId: number, kind: LedgerKind, amount: bigint, re
   const row = q('UPDATE users SET balance_nano = balance_nano + ? WHERE id = ? AND balance_nano + ? >= 0 RETURNING balance_nano').get(amount, userId, amount)
   if (!row) throw new LedgerError('Недостаточно средств')
   const balance = row.balance_nano as bigint
+  // Отыгрыш считается здесь, поэтому его не обойти: любое зачисление из списка добавляет долг, любая ставка уменьшает
+  if (MUST_WAGER.includes(kind) && amount > 0) {
+    q('UPDATE users SET wager_left_nano = wager_left_nano + ? WHERE id = ?').run((amount * BigInt(Math.round(config.wagerMult * 100))) / 100n, userId)
+  } else if (kind === 'bet') {
+    q('UPDATE users SET wager_left_nano = MAX(0, wager_left_nano + ?) WHERE id = ?').run(amount, userId)
+  }
   q('INSERT INTO ledger (user_id, kind, amount_nano, balance_after, ref, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(userId, kind, amount, balance, ref, Date.now())
   return balance
+}
+
+export const wagerLeft = (userId: number) => q('SELECT wager_left_nano FROM users WHERE id = ?').get(userId)!.wager_left_nano as bigint
+
+/** Ставку отменили или вернули: то, что она закрыла в отыгрыше, снова нужно поставить. Иначе долг закрывался бы без риска. */
+export function restoreWager(userId: number, nano: bigint) {
+  if (nano > 0n) q('UPDATE users SET wager_left_nano = wager_left_nano + ? WHERE id = ?').run(nano, userId)
+}
+
+/** Вывод TON и подарков открыт, только когда всё отыграно. */
+export function requireWagered(userId: number) {
+  const left = wagerLeft(userId)
+  if (left > 0n) throw new LedgerError(`Вывод откроется после отыгрыша: осталось поставить ${fromNano(left)} TON`)
 }
 
 export function changeBalance(userId: number, kind: LedgerKind, amount: bigint, ref: string | null): bigint {

@@ -10,6 +10,8 @@ export interface DemoSnapshot {
   v: 1
   savedAt: number
   balance: number
+  /** Отыгрыш: сколько ещё поставить до вывода. В старых снимках поля нет. */
+  wagerLeft?: number
   inventory: InvItem[]
   history: Tx[]
   stats: Stats

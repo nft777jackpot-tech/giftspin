@@ -6,7 +6,7 @@ import { config } from './config.ts'
 import { q, transaction } from './db.ts'
 import { randomSeed, roundFloats, sha256Hex } from './fair.ts'
 import { ROULETTE_CELLS, rouletteCell, rouletteMultiplier, type RouletteColor } from './gamemath.ts'
-import { applyLedger, LedgerError, type User } from './ledger.ts'
+import { applyLedger, LedgerError, restoreWager, wagerLeft, type User } from './ledger.ts'
 import { broadcast, onJoin, photoOf, publishUserWin } from './live.ts'
 
 export const ROULETTE_BET_MS = 10_000
@@ -139,10 +139,11 @@ export function placeRouletteBet(user: User, colorRaw: unknown, amount: bigint, 
   const before = round.bets.get(slot)?.amount ?? 0n
   if (before + amount > MAX_BET) throw new LedgerError('Слишком большая ставка')
   const balance = transaction(() => {
+    const before = wagerLeft(user.id)
     const b = applyLedger(user.id, 'bet', -amount, `roulette:${round.id}`)
     q(
-      'INSERT INTO roulette_bets (round_id, user_id, color, amount_nano, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT (round_id, user_id, color) DO UPDATE SET amount_nano = amount_nano + excluded.amount_nano',
-    ).run(round.id, user.id, color, amount, Date.now())
+      'INSERT INTO roulette_bets (round_id, user_id, color, amount_nano, wager_nano, created_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (round_id, user_id, color) DO UPDATE SET amount_nano = amount_nano + excluded.amount_nano, wager_nano = wager_nano + excluded.wager_nano',
+    ).run(round.id, user.id, color, amount, before - wagerLeft(user.id), Date.now())
     return b
   })
   round.bets.set(slot, { userId: user.id, name: user.name, color, amount: before + amount, payout: 0n })
@@ -157,8 +158,9 @@ export const rouletteHistory = () => history
 function recover() {
   for (const r of q("SELECT id FROM roulette_rounds WHERE status = 'open'").all()) {
     transaction(() => {
-      for (const b of q('SELECT user_id, amount_nano FROM roulette_bets WHERE round_id = ?').all(r.id)) {
+      for (const b of q('SELECT user_id, amount_nano, wager_nano FROM roulette_bets WHERE round_id = ?').all(r.id)) {
         applyLedger(Number(b.user_id), 'refund', b.amount_nano as bigint, `roulette:${r.id}:void`)
+        restoreWager(Number(b.user_id), b.wager_nano as bigint)
       }
       q("UPDATE roulette_rounds SET status = 'void' WHERE id = ?").run(r.id)
     })

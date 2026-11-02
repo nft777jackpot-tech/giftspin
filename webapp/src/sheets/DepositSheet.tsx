@@ -28,7 +28,7 @@ const POLL_MS = 5000
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export function DepositSheet() {
-  const { sheet, openSheet, deposit, server, refreshServer, warehouse, catalog } = useStore()
+  const { sheet, openSheet, deposit, server, refreshServer, warehouse, catalog, wagerMult } = useStore()
   const [tonConnectUI] = useTonConnectUI()
   const walletAddress = useTonAddress()
   const [tab, setTab] = useState<Tab>('ton')
@@ -38,6 +38,7 @@ export function DepositSheet() {
   const [sending, setSending] = useState(false)
   const close = () => openSheet(null)
   const value = parseFloat(amount.replace(',', '.')) || 0
+  const wagerNote = t('Перед выводом пополнение нужно отыграть: поставить в любых играх x{mult} от его суммы.', { mult: wagerMult })
   // При запущенном сервере TON настоящие: перевод на кошелёк проекта через TON Connect
   const live = !!server
   const min = server ? Number(server.limits.minDeposit) : MIN_DEPOSIT
@@ -163,6 +164,7 @@ export function DepositSheet() {
                 ? t('Пополнить на {amount} {cur}', { amount: fmtAmount(value), cur: 'TON' })
                 : t('Сначала подключите кошелёк')}
           </button>
+          {wagerMult > 0 && <p className="note">{wagerNote}</p>}
 
           {live && info && (
             <div className="manual-transfer">
@@ -250,6 +252,7 @@ export function DepositSheet() {
             </button>
           )}
           <p className="note">{t('Принимаются только улучшенные NFT-подарки. Подарок, купленный на маркете Telegram, зачислится, когда его можно будет передать дальше: до 21 дня.')}</p>
+          {wagerMult > 0 && <p className="note">{wagerNote}</p>}
         </div>
       )}
     </Sheet>

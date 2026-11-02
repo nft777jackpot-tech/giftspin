@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from '../components/Toaster'
-import { RTP, REF_SHARE } from '../config'
+import { RTP, REF_SHARE, WAGER_MULT } from '../config'
 import { buildCases, type CaseDef } from '../data/cases'
 import { findGift, getGift, GIFTS, isCoin, randomNum, registerGifts, setCatalog, type Gift } from '../data/gifts'
 import { PROMO_SEEDS, REF_FRIENDS, type Promo } from '../data/social'
@@ -108,6 +108,10 @@ interface Store {
   openSheet(s: SheetName): void
   /** Баланс в TON — единственной валюте. */
   balanceTon: number
+  /** Отыгрыш: сколько ещё поставить, прежде чем откроется вывод. */
+  wagerLeft: number
+  /** Сколько раз нужно поставить сумму пополнения или награды. */
+  wagerMult: number
   /** Списывает ставку с баланса. Возвращает false, если не хватает. */
   spend(ton: number, title: string): boolean
   credit(ton: number, title: string): void
@@ -184,6 +188,8 @@ const START_INVENTORY: InvItem[] = [
   { uid: uid(), giftId: 'deskcalendar', num: 2210 },
 ]
 
+const START_BALANCE = 25
+
 const EMPTY_STATS: Stats = { bets: 0, wagered: 0, wageredWeek: 0, betsToday: 0, deposited: 0, shares: 0, bestWin: 0 }
 
 function newSeeds(clientSeed = randomSeed(8)): SeedPair {
@@ -197,7 +203,17 @@ const REF_EARNED = REF_FRIENDS.reduce((s, f) => s + f.wagered * (1 - RTP) * REF_
 export function StoreProvider({ children }: { children: ReactNode }) {
   // Демо-игра сохраняется на устройстве и в облаке Telegram: при перезаходе всё на месте
   const [saved] = useState(loadLocal)
-  const [balanceTon, setBalance] = useState(saved?.balance ?? 25)
+  const [balanceTon, setBalance] = useState(saved?.balance ?? START_BALANCE)
+  // Отыгрыш в демо. Стартовый баланс нужно отыграть, как пополнение. С сервером отыгрыш считает сервер
+  const [demoWager, setDemoWagerState] = useState(saved ? (saved.wagerLeft ?? 0) : START_BALANCE * WAGER_MULT)
+  const demoWagerRef = useRef(demoWager)
+  /** Сколько отыгрыша закрыла последняя ставка: при её отмене это возвращается. */
+  const lastCounted = useRef(0)
+  const setDemoWager = useCallback((w: number) => {
+    const next = w < 1e-9 ? 0 : w
+    demoWagerRef.current = next
+    setDemoWagerState(next)
+  }, [])
   const [inventory, setInventory] = useState<InvItem[]>(saved?.inventory ?? START_INVENTORY)
   const [history, setHistory] = useState<Tx[]>(saved?.history ?? [])
   const [sheet, openSheet] = useState<SheetName>(null)
@@ -281,11 +297,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   /** Изменение баланса: сразу на экране, а при запущенном сервере — ещё и в его журнале. */
   const move = useCallback(
-    (delta: number, title: string) => {
+    (delta: number, title: string, bonus = false) => {
       add(delta)
       const live = serverRef.current
       if (!live?.trustClientGames || delta === 0) return
-      const kind = delta < 0 ? 'bet' : 'win'
+      const kind = bonus ? 'bonus' : delta < 0 ? 'bet' : 'win'
       api<{ balance: string }>(`/game/${kind}`, { method: 'POST', body: { amount: Math.abs(delta).toFixed(9), game: title } })
         .then((r) => syncTon(r.balance))
         .catch((e) => {
@@ -299,6 +315,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const spend = useCallback(
     (amountTon: number, title: string) => {
       if (amountTon <= 0 || amountTon > balanceTon + 1e-9) return false
+      if (!serverRef.current) {
+        lastCounted.current = Math.min(demoWagerRef.current, amountTon)
+        setDemoWager(demoWagerRef.current - lastCounted.current)
+      }
       move(-amountTon, title)
       log('bet', title, -amountTon)
       setStats((s) => ({
@@ -325,10 +345,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const refund = useCallback(
     (amountTon: number, title: string) => {
+      // Отмена ставки возвращает и отыгрыш, иначе его можно было бы закрыть без риска
+      if (!serverRef.current) {
+        setDemoWager(demoWagerRef.current + Math.min(amountTon, lastCounted.current))
+        lastCounted.current = 0
+      }
       move(amountTon, title)
       log('refund', title, amountTon)
     },
-    [move, log],
+    [move, log, setDemoWager],
   )
 
   const serverMove = useCallback(
@@ -350,24 +375,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return
       }
       add(amount)
+      setDemoWager(demoWagerRef.current + amount * WAGER_MULT)
       log('deposit', title, amount)
       setStats((s) => ({ ...s, deposited: s.deposited + amount }))
     },
-    [add, log],
+    [add, log, setDemoWager],
   )
 
   const bonus = useCallback(
     (amount: number, title: string) => {
-      move(amount, title)
+      // Награды отыгрываются так же, как пополнения
+      if (!serverRef.current) setDemoWager(demoWagerRef.current + amount * WAGER_MULT)
+      move(amount, title, true)
       log('bonus', title, amount)
     },
-    [move, log],
+    [move, log, setDemoWager],
   )
 
   const withdraw = useCallback(
     (amount: number, title: string) => {
       // Вывод при запущенном сервере идёт заявкой через сервер, а не локальным списанием
       if (serverRef.current) return false
+      if (demoWagerRef.current > 0) return false
       if (amount <= 0 || amount > balanceTon + 1e-9) return false
       add(-amount)
       log('withdraw', title, -amount)
@@ -448,6 +477,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const withdrawGifts = useCallback(
     (uids: string[]) => {
+      if (!serverRef.current && demoWagerRef.current > 0) return
       setInventory((inv) => inv.filter((i) => !uids.includes(i.uid)))
       if (!serverRef.current) return
       api('/gifts/withdraw', { method: 'POST', body: { ids: uids.map(serverId) } })
@@ -632,6 +662,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       .then((cloud) => {
         if (!cloud || (saved && saved.savedAt >= cloud.savedAt)) return
         setBalance(cloud.balance)
+        setDemoWager(cloud.wagerLeft ?? 0)
         setInventory(cloud.inventory)
         setHistory(cloud.history)
         setStats(cloud.stats)
@@ -656,6 +687,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       v: 1,
       savedAt: Date.now(),
       balance: balanceTon,
+      wagerLeft: demoWager,
       inventory,
       history: history.slice(0, 80),
       stats,
@@ -669,7 +701,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     saveLocal(snap)
     saveCloud(snap)
-  }, [server, balanceTon, inventory, history, stats, tasksDone, promo, refClaimed, seeds, revealed, rounds, drops])
+  }, [server, balanceTon, demoWager, inventory, history, stats, tasksDone, promo, refClaimed, seeds, revealed, rounds, drops])
 
   const value = useMemo<Store>(
     () => ({
@@ -683,6 +715,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       sheet,
       openSheet,
       balanceTon,
+      wagerLeft: server ? Number(server.wagerLeft) : demoWager,
+      wagerMult: server?.wagerMult ?? WAGER_MULT,
       spend,
       credit,
       refund,
@@ -720,7 +754,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       removeCase,
     }),
     [
-      server, refreshServer, inventory, catalog, warehouse, giftRequests, history, sheet, balanceTon, spend, credit, refund, drops, serverMove, deposit, withdraw,
+      server, refreshServer, inventory, catalog, warehouse, giftRequests, history, sheet, balanceTon, demoWager, spend, credit, refund, drops, serverMove, deposit, withdraw,
       bonus, serverGames, playGame, openCase, addItem, removeItems, sellItems, withdrawGifts, seeds, revealed, roll, rotateSeeds, rounds, logRound, stats, noteShare, tasksDone,
       completeTask, promos, promo, activatePromo, addPromo, refClaimed, claimRef, cases, addCase, removeCase,
     ],

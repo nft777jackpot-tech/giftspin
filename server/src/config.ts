@@ -8,6 +8,7 @@ export const NETWORK: Network = env.TON_NETWORK === 'mainnet' ? 'mainnet' : 'tes
 export const IS_TESTNET = NETWORK === 'testnet'
 
 const ton = (name: string, fallback: string) => toNano(env[name]?.trim() || fallback)
+const wagerMult = Number(env.WAGER_MULT)
 
 /**
  * Склад подарков. telegram — аккаунт в бизнес-режиме, к которому подключён бот; fake — тестовый список
@@ -42,6 +43,8 @@ export const config = {
   reviewOver: ton('REVIEW_OVER_TON', '10'),
   dailyWithdraw: ton('DAILY_WITHDRAW_TON', '100'),
   withdrawFee: ton('WITHDRAW_FEE_TON', '0.05'),
+  /** Отыгрыш: сколько раз нужно поставить сумму пополнения или бонуса, прежде чем открыть вывод. */
+  wagerMult: env.WAGER_MULT?.trim() && Number.isFinite(wagerMult) && wagerMult >= 0 ? wagerMult : 1,
   /** Наибольшая выплата за одну ставку: один удачный раунд не опустошит банк. */
   maxWin: ton('MAX_WIN_TON', '500'),
   /** Остаток на горячем кошельке, который не тратим на выплаты: из него платится газ. */

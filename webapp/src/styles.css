@@ -1992,3 +1992,9 @@ code.ref-link { border-style: dashed; }
   .cases-grid { grid-template-columns: repeat(5, 1fr); }
   .gift-grid { grid-template-columns: repeat(6, 1fr); }
 }
+
+/* Отыгрыш: сколько ещё поставить до вывода */
+.wager-box { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(255, 197, 66, 0.1); border: 1px solid rgba(255, 197, 66, 0.28); }
+.screen > .wager-box { margin-top: 0; }
+.wager-box b { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; }
+.wager-box > span { color: var(--text-2); font-size: 12px; }

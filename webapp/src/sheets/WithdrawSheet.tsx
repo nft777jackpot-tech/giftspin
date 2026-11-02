@@ -6,6 +6,7 @@ import { Money } from '../components/Money'
 import { Sheet } from '../components/Sheet'
 import { toast } from '../components/Toaster'
 import { TonWalletRow } from '../components/TonWalletRow'
+import { WagerBox } from '../components/WagerBox'
 import { api, ApiError, explorerTx, type Withdrawal } from '../lib/api'
 import { fmtAmount, fmtTime } from '../lib/format'
 import { t, tk } from '../lib/i18n'
@@ -34,7 +35,7 @@ const STATUS: Record<Withdrawal['status'], string> = {
 }
 
 export function WithdrawSheet() {
-  const { sheet, openSheet, balanceTon, withdraw, inventory, withdrawGifts, giftRequests, server, refreshServer } = useStore()
+  const { sheet, openSheet, balanceTon, wagerLeft, withdraw, inventory, withdrawGifts, giftRequests, server, refreshServer } = useStore()
   const walletAddress = useTonAddress()
   const [tab, setTab] = useState<Tab>('ton')
   const [address, setAddress] = useState('')
@@ -52,7 +53,10 @@ export function WithdrawSheet() {
   const fee = limits ? Number(limits.withdrawFee) : NETWORK_FEE
   const min = limits ? Number(limits.minWithdraw) : MIN_WITHDRAW
   const addressOk = /^[A-Za-z0-9_-]{48}$/.test(address.trim())
-  const canSend = addressOk && value >= min && value <= have + 1e-9 && value > fee && !busy
+  // Пока не отыграны пополнения и награды, вывод закрыт. Окончательно это проверяет сервер
+  const locked = wagerLeft > 0
+  const lockedText = t('Сначала отыграйте {amount} TON', { amount: fmtAmount(Math.ceil(wagerLeft * 100) / 100) })
+  const canSend = addressOk && value >= min && value <= have + 1e-9 && value > fee && !busy && !locked
 
   const loadList = useCallback(() => {
     if (server) api<Withdrawal[]>('/withdrawals').then(setList).catch(() => {})
@@ -60,6 +64,8 @@ export function WithdrawSheet() {
 
   useEffect(() => {
     if (sheet !== 'withdraw') return
+    // Открыли вывод — берём свежий отыгрыш: ставки могли его закрыть
+    if (server) refreshServer()
     loadList()
     const timer = setInterval(loadList, 5000)
     return () => clearInterval(timer)
@@ -106,6 +112,8 @@ export function WithdrawSheet() {
         </button>
       </div>
 
+      <WagerBox />
+
       {tab === 'ton' && (
         <div className="stack">
           {live && <TonWalletRow />}
@@ -136,7 +144,7 @@ export function WithdrawSheet() {
             <b>{fmtAmount(Math.max(0, value - fee))} TON</b>
           </div>
           <button type="button" className="btn btn--primary btn--lg btn--block" disabled={!canSend} onClick={submit}>
-            {busy ? t('Отправляем заявку…') : t('Вывести')}
+            {busy ? t('Отправляем заявку…') : locked ? lockedText : t('Вывести')}
           </button>
           <p className="note">
             {limits
@@ -196,7 +204,7 @@ export function WithdrawSheet() {
           <button
             type="button"
             className="btn btn--primary btn--lg btn--block"
-            disabled={!picked.length}
+            disabled={!picked.length || locked}
             onClick={() => {
               withdrawGifts(picked)
               setPicked([])
@@ -205,7 +213,7 @@ export function WithdrawSheet() {
               if (!server) close()
             }}
           >
-            {t('Вывести {n} в Telegram', { n: picked.length || '' })}
+            {locked ? lockedText : t('Вывести {n} в Telegram', { n: picked.length || '' })}
           </button>
           {server && giftRequests.length > 0 && (
             <div className="withdraw-list">

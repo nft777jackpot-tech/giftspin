@@ -37,7 +37,7 @@ function doneNow(task: TaskDef, at: number | undefined, now: number): boolean {
 const LEVEL = { easy: tk('Легко'), medium: tk('Средне'), hard: tk('Сложно') }
 
 export function Tasks() {
-  const { stats, tasksDone, completeTask, openSheet } = useStore()
+  const { stats, tasksDone, completeTask, openSheet, wagerMult } = useStore()
   const { open, setTab } = useNav()
   const [opened, setOpened] = useState(false)
   const [checking, setChecking] = useState(false)
@@ -147,6 +147,7 @@ export function Tasks() {
       </div>
 
       <p className="note">{t('Подписку на канал бот проверяет сам. Задания с другом засчитываются, когда друг пополнит баланс.')}</p>
+      <p className="note">{t('Награды, как и пополнения, нужно отыграть перед выводом: поставить в любых играх x{mult} от их суммы.', { mult: wagerMult })}</p>
     </div>
   )
 }

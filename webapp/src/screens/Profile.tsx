@@ -1,3 +1,4 @@
+import { WagerBox } from '../components/WagerBox'
 import type { ReactNode } from 'react'
 import { Avatar } from '../components/Avatar'
 import {
@@ -56,6 +57,8 @@ export function Profile() {
         <div className="balance-card__label">{t('Баланс')}</div>
         <Money ton={balanceTon} size={16} className="balance-card__value" />
       </div>
+
+      <WagerBox />
 
       <div className="row-2">
         <button type="button" className="btn btn--primary btn--lg" onClick={() => openSheet('deposit')}>

@@ -89,6 +89,8 @@ export function registerRoutes(app: FastifyInstance) {
       name: user.name,
       memo: user.memo,
       balance: ton(user.balance),
+      wagerLeft: ton(user.wagerLeft),
+      wagerMult: config.wagerMult,
       network: NETWORK,
       depositAddress: friendly(hotAddress()),
       trustClientGames: config.trustClientGames,
@@ -249,12 +251,12 @@ export function registerRoutes(app: FastifyInstance) {
   })
 
   // Временное: ставки и выигрыши считает сайт. Только testnet, до переноса игр на сервер
-  app.post<{ Body: { amount?: string; game?: string }; Params: { kind: 'bet' | 'win' } }>('/api/game/:kind', async (req, reply) => {
+  app.post<{ Body: { amount?: string; game?: string }; Params: { kind: 'bet' | 'win' | 'bonus' } }>('/api/game/:kind', async (req, reply) => {
     if (!config.trustClientGames) return reply.code(403).send({ error: 'Игры на сервере ещё не подключены' })
     const user = requireUser(req, reply)
     if (!user) return
     const kind = req.params.kind
-    if (kind !== 'bet' && kind !== 'win') return reply.code(404).send({ error: 'Нет такой операции' })
+    if (kind !== 'bet' && kind !== 'win' && kind !== 'bonus') return reply.code(404).send({ error: 'Нет такой операции' })
     try {
       const amount = parseAmount(req.body?.amount)
       if (amount > MAX_GAME_AMOUNT) throw new LedgerError('Слишком большая сумма')

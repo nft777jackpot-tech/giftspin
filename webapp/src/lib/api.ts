@@ -42,6 +42,9 @@ export interface ServerMe {
   memo: string
   /** Баланс TON строкой, точно до нанотона. */
   balance: string
+  /** Отыгрыш: сколько ещё поставить до вывода. */
+  wagerLeft: string
+  wagerMult: number
   network: 'testnet' | 'mainnet'
   depositAddress: string
   trustClientGames: boolean

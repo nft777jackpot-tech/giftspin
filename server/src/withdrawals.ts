@@ -4,7 +4,7 @@ import type { FastifyBaseLogger } from 'fastify'
 import { fromNano } from '@ton/core'
 import { config } from './config.ts'
 import { q, transaction } from './db.ts'
-import { applyLedger, LedgerError } from './ledger.ts'
+import { applyLedger, LedgerError, requireWagered } from './ledger.ts'
 import { broadcast, findOutgoing, friendly, hotBalance, hotSeqno, parseAddress, signTransfer, type SignedTransfer } from './ton.ts'
 
 export type WithdrawalStatus = 'queued' | 'review' | 'sending' | 'sent' | 'failed' | 'rejected'
@@ -27,6 +27,7 @@ function setStatus(id: number, status: WithdrawalStatus, extra: { seqno?: number
 
 /** Заявка на вывод. amount — сколько списать с баланса, игрок получит amount минус комиссию. */
 export function requestWithdrawal(userId: number, addressText: string, amount: bigint) {
+  requireWagered(userId)
   let address: string
   try {
     address = friendly(parseAddress(addressText))

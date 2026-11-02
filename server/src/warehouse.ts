@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs'
 import { fromNano } from '@ton/core'
 import { config } from './config.ts'
 import { kv, q, transaction, type Row } from './db.ts'
-import { applyLedger, ensureUser, LedgerError } from './ledger.ts'
+import { applyLedger, ensureUser, LedgerError, requireWagered } from './ledger.ts'
 import { botApi, type BusinessConnection, type OwnedGift, type OwnedGifts, type TgUpdate, type TgUser, type UniqueGift, type UniqueGiftInfo } from './telegram.ts'
 
 const CONNECTION = 'warehouse.connection'
@@ -278,6 +278,7 @@ export function sellGifts(userId: number, ids: string[]): { count: number; amoun
 
 /** Заявка на вывод: подарок ждёт проверки администратора, потом бот передаёт его игроку. */
 export function requestGiftWithdrawal(userId: number, ids: string[]): number {
+  requireWagered(userId)
   return transaction(() =>
     ids.reduce((n, id) => n + Number(q("UPDATE stock SET status = 'withdrawing', error = NULL, updated_at = ? WHERE id = ? AND user_id = ? AND status = 'reserved'").run(Date.now(), id, userId).changes), 0),
   )
